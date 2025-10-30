@@ -20,24 +20,18 @@ export default function Footer() {
             <h3 className="font-semibold mb-4">Platform</h3>
             <ul className="space-y-2 text-sm">
               <li>
-                <Link href="/browse">
-                  <a className="text-muted-foreground hover:text-foreground" data-testid="link-footer-browse">
-                    Browse Items
-                  </a>
+                <Link href="/browse" className="text-muted-foreground hover:text-foreground" data-testid="link-footer-browse">
+                  Browse Items
                 </Link>
               </li>
               <li>
-                <Link href="/post">
-                  <a className="text-muted-foreground hover:text-foreground" data-testid="link-footer-post">
-                    Post Item
-                  </a>
+                <Link href="/post" className="text-muted-foreground hover:text-foreground" data-testid="link-footer-post">
+                  Post Item
                 </Link>
               </li>
               <li>
-                <Link href="/dashboard">
-                  <a className="text-muted-foreground hover:text-foreground" data-testid="link-footer-dashboard">
-                    Dashboard
-                  </a>
+                <Link href="/dashboard" className="text-muted-foreground hover:text-foreground" data-testid="link-footer-dashboard">
+                  Dashboard
                 </Link>
               </li>
             </ul>
@@ -47,24 +41,18 @@ export default function Footer() {
             <h3 className="font-semibold mb-4">Resources</h3>
             <ul className="space-y-2 text-sm">
               <li>
-                <Link href="/faq">
-                  <a className="text-muted-foreground hover:text-foreground" data-testid="link-footer-faq">
-                    FAQ
-                  </a>
+                <Link href="/faq" className="text-muted-foreground hover:text-foreground" data-testid="link-footer-faq">
+                  FAQ
                 </Link>
               </li>
               <li>
-                <Link href="/safety">
-                  <a className="text-muted-foreground hover:text-foreground" data-testid="link-footer-safety">
-                    Safety Tips
-                  </a>
+                <Link href="/safety" className="text-muted-foreground hover:text-foreground" data-testid="link-footer-safety">
+                  Safety Tips
                 </Link>
               </li>
               <li>
-                <Link href="/how-it-works">
-                  <a className="text-muted-foreground hover:text-foreground" data-testid="link-footer-how">
-                    How It Works
-                  </a>
+                <Link href="/how-it-works" className="text-muted-foreground hover:text-foreground" data-testid="link-footer-how">
+                  How It Works
                 </Link>
               </li>
             </ul>
@@ -74,24 +62,18 @@ export default function Footer() {
             <h3 className="font-semibold mb-4">Legal</h3>
             <ul className="space-y-2 text-sm">
               <li>
-                <Link href="/privacy">
-                  <a className="text-muted-foreground hover:text-foreground" data-testid="link-footer-privacy">
-                    Privacy Policy
-                  </a>
+                <Link href="/privacy" className="text-muted-foreground hover:text-foreground" data-testid="link-footer-privacy">
+                  Privacy Policy
                 </Link>
               </li>
               <li>
-                <Link href="/terms">
-                  <a className="text-muted-foreground hover:text-foreground" data-testid="link-footer-terms">
-                    Terms of Service
-                  </a>
+                <Link href="/terms" className="text-muted-foreground hover:text-foreground" data-testid="link-footer-terms">
+                  Terms of Service
                 </Link>
               </li>
               <li>
-                <Link href="/contact">
-                  <a className="text-muted-foreground hover:text-foreground" data-testid="link-footer-contact">
-                    Contact Us
-                  </a>
+                <Link href="/contact" className="text-muted-foreground hover:text-foreground" data-testid="link-footer-contact">
+                  Contact Us
                 </Link>
               </li>
             </ul>
