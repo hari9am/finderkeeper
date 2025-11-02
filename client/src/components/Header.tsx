@@ -10,21 +10,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "./ThemeProvider";
-import { useAuth } from "@/hooks/useAuth";
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function Header() {
   const { theme, toggleTheme } = useTheme();
-  const { user, isAuthenticated } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, isAuthenticated } = useAuth();
 
-  const handleLogin = () => {
-    window.location.href = "/api/login";
-  };
-
-  const handleLogout = () => {
-    window.location.href = "/api/logout";
-  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -58,55 +51,38 @@ export default function Header() {
             </Button>
 
             <div className="hidden md:flex items-center gap-2">
-              {isAuthenticated && user ? (
-                <>
-                  <Link href="/post">
-                    <Button data-testid="button-post-item">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Post Item
-                    </Button>
-                  </Link>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="relative h-9 w-9 rounded-full" data-testid="button-user-menu">
-                        <Avatar className="h-9 w-9">
-                          <AvatarImage src={user.profileImageUrl || undefined} alt={user.firstName || "User"} className="object-cover" />
-                          <AvatarFallback>{user.firstName?.[0] || user.email?.[0] || "U"}</AvatarFallback>
-                        </Avatar>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <div className="flex items-center justify-start gap-2 p-2">
-                        <div className="flex flex-col space-y-1">
-                          <p className="text-sm font-medium">
-                            {user.firstName && user.lastName
-                              ? `${user.firstName} ${user.lastName}`
-                              : user.email}
-                          </p>
-                          {user.email && (
-                            <p className="text-xs text-muted-foreground">{user.email}</p>
-                          )}
-                        </div>
-                      </div>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
-                        <Link href="/dashboard" className="w-full cursor-pointer" data-testid="link-dashboard">
-                          Dashboard
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={handleLogout} data-testid="button-logout">
-                        <LogOut className="w-4 h-4 mr-2" />
-                        Log out
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </>
-              ) : (
-                <Button variant="outline" onClick={handleLogin} data-testid="button-login">
-                  <User className="w-4 h-4 mr-2" />
-                  Login
+              <Link href="/report">
+                <Button data-testid="button-post-item">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Post Item
                 </Button>
+              </Link>
+              {!isAuthenticated ? (
+                <a href="/api/login/google">
+                  <Button variant="outline" data-testid="button-login-google">Login</Button>
+                </a>
+              ) : (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="p-0 h-10 w-10 rounded-full" data-testid="button-user-menu">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={user?.profileImageUrl || undefined} alt={user?.firstName || "U"} />
+                        <AvatarFallback>{(user?.firstName?.[0] || "U").toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem asChild>
+                      <Link href="/dashboard">Dashboard</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <a href="/api/logout" className="flex items-center gap-2" data-testid="button-logout">
+                        <LogOut className="w-4 h-4" /> Logout
+                      </a>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </div>
 
@@ -125,40 +101,32 @@ export default function Header() {
         {mobileMenuOpen && (
           <div className="md:hidden py-4 border-t">
             <nav className="flex flex-col gap-2">
-              <Link href="/browse" className="text-sm font-medium hover-elevate rounded-md px-3 py-2" data-testid="link-mobile-browse">
+              <Link href="/browse" className="text-sm font-medium hover-elevate rounded-md px-3 py-2" data-testid="link-mobile-browse" onClick={() => setMobileMenuOpen(false)}>
                 Browse Items
               </Link>
-              <Link href="/faq" className="text-sm font-medium hover-elevate rounded-md px-3 py-2" data-testid="link-mobile-faq">
+              <Link href="/faq" className="text-sm font-medium hover-elevate rounded-md px-3 py-2" data-testid="link-mobile-faq" onClick={() => setMobileMenuOpen(false)}>
                 FAQ
               </Link>
-              <Link href="/safety" className="text-sm font-medium hover-elevate rounded-md px-3 py-2" data-testid="link-mobile-safety">
+              <Link href="/safety" className="text-sm font-medium hover-elevate rounded-md px-3 py-2" data-testid="link-mobile-safety" onClick={() => setMobileMenuOpen(false)}>
                 Safety Tips
               </Link>
-              {isAuthenticated && user ? (
-                <div className="flex flex-col gap-2 mt-2">
-                  <Link href="/dashboard">
-                    <Button variant="outline" className="w-full justify-start" data-testid="button-mobile-dashboard">
-                      <User className="w-4 h-4 mr-2" />
-                      Dashboard
-                    </Button>
-                  </Link>
-                  <Link href="/post">
-                    <Button className="w-full" data-testid="button-mobile-post">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Post Item
-                    </Button>
-                  </Link>
-                  <Button variant="ghost" onClick={handleLogout} className="w-full justify-start" data-testid="button-mobile-logout">
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Log out
+              <div className="flex flex-col gap-2 mt-2">
+                <Link href="/post" onClick={() => setMobileMenuOpen(false)}>
+                  <Button className="w-full" data-testid="button-mobile-post">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Post Item
                   </Button>
-                </div>
-              ) : (
-                <Button variant="outline" onClick={handleLogin} className="w-full mt-2" data-testid="button-mobile-login">
-                  <User className="w-4 h-4 mr-2" />
-                  Login
-                </Button>
-              )}
+                </Link>
+                {!isAuthenticated ? (
+                  <a href="/api/login/google" onClick={() => setMobileMenuOpen(false)}>
+                    <Button variant="outline" className="w-full" data-testid="button-mobile-login">Login</Button>
+                  </a>
+                ) : (
+                  <a href="/api/logout" onClick={() => setMobileMenuOpen(false)}>
+                    <Button variant="outline" className="w-full" data-testid="button-mobile-logout">Logout</Button>
+                  </a>
+                )}
+              </div>
             </nav>
           </div>
         )}

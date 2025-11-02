@@ -4,7 +4,8 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation } from "wouter";
 
 const categories = [
   "Electronics",
@@ -20,26 +21,54 @@ const categories = [
 export default function FilterPanel() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<string[]>([]);
+  const [loc, setRoute] = useLocation();
+
+  // Initialize from URL
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const status = (params.get("status") || "").split(",").map((s) => s.trim()).filter(Boolean);
+      const category = (params.get("category") || "").split(",").map((s) => s.trim()).filter(Boolean);
+      // store as Title Case for display if possible, but keep lower for status
+      setSelectedStatus(status.map((s) => s.toLowerCase() === "found" ? "Found" : s.toLowerCase() === "lost" ? "Lost" : s));
+      // categories can be any casing; try to match the known list
+      setSelectedCategories(
+        category.map((c) => {
+          const match = categories.find((k) => k.toLowerCase() === c.toLowerCase());
+          return match || c;
+        })
+      );
+    } catch {}
+  }, [loc]);
+
+  const applyToUrl = (nextStatus: string[], nextCategories: string[]) => {
+    const params = new URLSearchParams();
+    if (nextStatus.length) params.set("status", nextStatus.map((s) => s.toLowerCase()).join(","));
+    if (nextCategories.length) params.set("category", nextCategories.map((c) => c.toLowerCase()).join(","));
+    const qs = params.toString();
+    setRoute(qs ? `/browse?${qs}` : "/browse");
+  };
 
   const toggleCategory = (category: string) => {
-    setSelectedCategories((prev) =>
-      prev.includes(category)
-        ? prev.filter((c) => c !== category)
-        : [...prev, category]
-    );
+    setSelectedCategories((prev) => {
+      const next = prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category];
+      applyToUrl(selectedStatus, next);
+      return next;
+    });
   };
 
   const toggleStatus = (status: string) => {
-    setSelectedStatus((prev) =>
-      prev.includes(status)
-        ? prev.filter((s) => s !== status)
-        : [...prev, status]
-    );
+    setSelectedStatus((prev) => {
+      const next = prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status];
+      applyToUrl(next, selectedCategories);
+      return next;
+    });
   };
 
   const clearAll = () => {
     setSelectedCategories([]);
     setSelectedStatus([]);
+    setRoute("/browse");
   };
 
   const hasFilters = selectedCategories.length > 0 || selectedStatus.length > 0;

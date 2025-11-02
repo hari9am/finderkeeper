@@ -1,33 +1,43 @@
 // Replit Auth integration - blueprint:javascript_log_in_with_replit
-import * as client from "openid-client";
-import { Strategy, type VerifyFunction } from "openid-client/passport";
+import { Issuer, Strategy, type TokenSet, type Client } from "openid-client";
 
 import passport from "passport";
 import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import memoize from "memoizee";
-import connectPg from "connect-pg-simple";
+import MySQLSessionFactory from "express-mysql-session";
+import { pool } from "./db";
 import { storage } from "./storage";
 
-const getOidcConfig = memoize(
+const getIssuer = memoize(
   async () => {
-    return await client.discovery(
-      new URL(process.env.ISSUER_URL ?? "https://replit.com/oidc"),
-      process.env.REPL_ID!
-    );
+    const issuerUrl = process.env.ISSUER_URL ?? "https://replit.com/oidc";
+    return await Issuer.discover(issuerUrl);
   },
   { maxAge: 3600 * 1000 }
 );
 
+// Share OIDC clients across handlers by domain
+const clientsByDomain = new Map<string, Client>();
+
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
-  const pgStore = connectPg(session);
-  const sessionStore = new pgStore({
-    conString: process.env.DATABASE_URL,
-    createTableIfMissing: false,
-    ttl: sessionTtl,
-    tableName: "sessions",
-  });
+  const MySQLStore = MySQLSessionFactory(session);
+  const sessionStore = new MySQLStore(
+    {
+      expiration: sessionTtl,
+      createDatabaseTable: true,
+      schema: {
+        tableName: "sessions",
+        columnNames: {
+          session_id: "sid",
+          expires: "expire",
+          data: "sess",
+        },
+      },
+    },
+    pool as any,
+  );
   return session({
     secret: process.env.SESSION_SECRET!,
     store: sessionStore,
@@ -35,20 +45,20 @@ export function getSession() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: true,
+      // Use secure cookies only in production; in local HTTP dev, secure cookies won't be sent
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
       maxAge: sessionTtl,
     },
   });
 }
 
-function updateUserSession(
-  user: any,
-  tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers
-) {
-  user.claims = tokens.claims();
+function updateUserSession(user: any, tokens: TokenSet, claims: any) {
+  user.claims = claims;
   user.access_token = tokens.access_token;
   user.refresh_token = tokens.refresh_token;
-  user.expires_at = user.claims?.exp;
+  // Prefer tokens.expires_at if present
+  user.expires_at = tokens.expires_at ?? claims?.exp;
 }
 
 async function upsertUser(claims: any) {
@@ -67,15 +77,52 @@ export async function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
-  const config = await getOidcConfig();
+  let issuer: Awaited<ReturnType<typeof getIssuer>>;
+  try {
+    issuer = await getIssuer();
+  } catch (err) {
+    // If OIDC discovery fails (e.g., local dev without REPL_ID/REPL_SECRET)
+    if (process.env.ALLOW_DEV_AUTH === "true") {
+      // Lightweight dev login that seeds a mock user and sets a session
+      app.get("/api/login", async (req: any, res) => {
+        const devUser = {
+          claims: { sub: "dev-user", email: "dev@example.com", first_name: "Dev", last_name: "User" },
+          expires_at: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
+        } as any;
+        try {
+          await storage.upsertUser({ id: "dev-user", email: "dev@example.com", firstName: "Dev", lastName: "User" });
+        } catch {}
+        req.login(devUser, (e: any) => {
+          if (e) return res.status(500).json({ message: "Dev login failed" });
+          res.redirect("/");
+        });
+      });
+      app.get("/api/callback", (_req, res) => res.redirect("/"));
+      app.get("/api/logout", (req, res) => {
+        req.logout(() => res.redirect("/"));
+      });
+      return;
+    } else {
+      // Strict mode: keep endpoints but indicate misconfiguration
+      app.get("/api/login", (_req, res) =>
+        res.status(503).json({ message: "Auth not configured. Set REPL_ID/REPL_SECRET and ensure ISSUER_URL is reachable." })
+      );
+      app.get("/api/callback", (_req, res) =>
+        res.status(503).json({ message: "Auth not configured. Set REPL_ID/REPL_SECRET and ensure ISSUER_URL is reachable." })
+      );
+      app.get("/api/logout", (_req, res) => res.redirect("/"));
+      return;
+    }
+  }
 
-  const verify: VerifyFunction = async (
-    tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers,
+  const verify = async (
+    tokens: TokenSet,
+    userinfo: any,
     verified: passport.AuthenticateCallback
   ) => {
-    const user = {};
-    updateUserSession(user, tokens);
-    await upsertUser(tokens.claims());
+    const user = {} as any;
+    updateUserSession(user, tokens, userinfo);
+    await upsertUser(userinfo);
     verified(null, user);
   };
 
@@ -84,17 +131,25 @@ export async function setupAuth(app: Express) {
   const ensureStrategy = (domain: string) => {
     const strategyName = `replitauth:${domain}`;
     if (!registeredStrategies.has(strategyName)) {
+      const client = new issuer.Client({
+        client_id: process.env.REPL_ID!,
+        client_secret: process.env.REPL_SECRET,
+        redirect_uris: [`https://${domain}/api/callback`],
+        response_types: ["code"],
+      });
+
       const strategy = new Strategy(
         {
-          name: strategyName,
-          config,
-          scope: "openid email profile offline_access",
-          callbackURL: `https://${domain}/api/callback`,
+          client,
+          params: {
+            scope: "openid email profile offline_access",
+          },
         },
         verify
       );
       passport.use(strategy);
       registeredStrategies.add(strategyName);
+      clientsByDomain.set(domain, client);
     }
   };
 
@@ -119,12 +174,14 @@ export async function setupAuth(app: Express) {
 
   app.get("/api/logout", (req, res) => {
     req.logout(() => {
-      res.redirect(
-        client.buildEndSessionUrl(config, {
-          client_id: process.env.REPL_ID!,
-          post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
-        }).href
-      );
+      const client = clientsByDomain.get(req.hostname);
+      if (!client) {
+        return res.redirect("/");
+      }
+      const url = client.endSessionUrl({
+        post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
+      });
+      res.redirect(url);
     });
   });
 }
@@ -148,9 +205,19 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
   }
 
   try {
-    const config = await getOidcConfig();
-    const tokenResponse = await client.refreshTokenGrant(config, refreshToken);
-    updateUserSession(user, tokenResponse);
+    const issuer = await getIssuer();
+    let client = clientsByDomain.get(req.hostname);
+    if (!client) {
+      client = new issuer.Client({
+        client_id: process.env.REPL_ID!,
+        client_secret: process.env.REPL_SECRET,
+        redirect_uris: [`${req.protocol}://${req.hostname}/api/callback`],
+        response_types: ["code"],
+      });
+      clientsByDomain.set(req.hostname, client);
+    }
+    const tokenResponse = await client.refresh(refreshToken);
+    updateUserSession(user, tokenResponse, user.claims);
     return next();
   } catch (error) {
     res.status(401).json({ message: "Unauthorized" });

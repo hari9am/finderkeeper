@@ -13,11 +13,13 @@ import {
   type InsertNotification,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, desc, ilike } from "drizzle-orm";
+import { eq, and, or, desc, like, sql } from "drizzle-orm";
+import crypto from "node:crypto";
 
 export interface IStorage {
   // User operations - Required for Replit Auth
   getUser(id: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   updateUserKarma(id: string, points: number): Promise<User | undefined>;
 
@@ -28,6 +30,7 @@ export interface IStorage {
   searchItems(query: string): Promise<Item[]>;
   updateItem(id: string, updates: Partial<InsertItem>): Promise<Item | undefined>;
   deleteItem(id: string): Promise<void>;
+  deleteAllItems(): Promise<void>;
   getUserItems(userId: string): Promise<Item[]>;
 
   // Message operations
@@ -49,37 +52,71 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
   async upsertUser(userData: UpsertUser): Promise<User> {
-    const [user] = await db
+    // Prefer existing user by email so email acts as the stable key for accounts
+    if (userData.email) {
+      const existingByEmail = await this.getUserByEmail(userData.email);
+      if (existingByEmail) {
+        await db
+          .update(users)
+          .set({
+            email: userData.email ?? existingByEmail.email,
+            firstName: userData.firstName ?? existingByEmail.firstName,
+            lastName: userData.lastName ?? existingByEmail.lastName,
+            profileImageUrl: userData.profileImageUrl ?? existingByEmail.profileImageUrl,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, existingByEmail.id));
+
+        const [updated] = await db.select().from(users).where(eq(users.id, existingByEmail.id));
+        return updated!;
+      }
+    }
+
+    // Otherwise insert new user using provided id (e.g., OIDC subject)
+    await db
       .insert(users)
       .values(userData)
-      .onConflictDoUpdate({
-        target: users.id,
+      .onDuplicateKeyUpdate({
         set: {
           ...userData,
           updatedAt: new Date(),
         },
-      })
-      .returning();
-    return user;
+      });
+    const [user] = await db.select().from(users).where(eq(users.id, userData.id as string));
+    return user!;
   }
 
   async updateUserKarma(id: string, points: number): Promise<User | undefined> {
-    const user = await this.getUser(id);
-    if (!user) return undefined;
+    // Perform atomic increment without relying on unsupported MySQL returning()
+    const existing = await this.getUser(id);
+    if (!existing) return undefined;
 
-    const [updated] = await db
+    await db
       .update(users)
-      .set({ karmaPoints: (user.karmaPoints || 0) + points, updatedAt: new Date() })
-      .where(eq(users.id, id))
-      .returning();
+      .set({ karmaPoints: sql`${users.karmaPoints} + ${points}`, updatedAt: new Date() })
+      .where(eq(users.id, id));
+
+    const [updated] = await db.select().from(users).where(eq(users.id, id));
     return updated;
   }
 
   // Item operations
   async createItem(itemData: InsertItem): Promise<Item> {
-    const [item] = await db.insert(items).values(itemData).returning();
-    return item;
+    const id = itemData.id as string | undefined;
+    let createdId = id;
+    if (!createdId) {
+      // generate in app if not provided to read back
+      createdId = crypto.randomUUID();
+    }
+    await db.insert(items).values({ ...itemData, id: createdId });
+    const [item] = await db.select().from(items).where(eq(items.id, createdId));
+    return item!;
   }
 
   async getItem(id: string): Promise<Item | undefined> {
@@ -119,25 +156,29 @@ export class DatabaseStorage implements IStorage {
       .from(items)
       .where(
         or(
-          ilike(items.title, searchPattern),
-          ilike(items.description, searchPattern),
-          ilike(items.location, searchPattern)
+          like(items.title, searchPattern),
+          like(items.description, searchPattern),
+          like(items.location, searchPattern)
         )
       )
       .orderBy(desc(items.createdAt));
   }
 
   async updateItem(id: string, updates: Partial<InsertItem>): Promise<Item | undefined> {
-    const [updated] = await db
+    await db
       .update(items)
       .set({ ...updates, updatedAt: new Date() })
-      .where(eq(items.id, id))
-      .returning();
+      .where(eq(items.id, id));
+    const [updated] = await db.select().from(items).where(eq(items.id, id));
     return updated;
   }
 
   async deleteItem(id: string): Promise<void> {
     await db.delete(items).where(eq(items.id, id));
+  }
+
+  async deleteAllItems(): Promise<void> {
+    await db.delete(items);
   }
 
   async getUserItems(userId: string): Promise<Item[]> {
@@ -150,8 +191,12 @@ export class DatabaseStorage implements IStorage {
 
   // Message operations
   async createMessage(messageData: InsertMessage): Promise<Message> {
-    const [message] = await db.insert(messages).values(messageData).returning();
-    return message;
+    const id = messageData.id as string | undefined;
+    let createdId = id;
+    if (!createdId) createdId = crypto.randomUUID();
+    await db.insert(messages).values({ ...messageData, id: createdId });
+    const [message] = await db.select().from(messages).where(eq(messages.id, createdId));
+    return message!;
   }
 
   async getConversation(userId1: string, userId2: string): Promise<Message[]> {
@@ -191,11 +236,15 @@ export class DatabaseStorage implements IStorage {
 
   // Notification operations
   async createNotification(notificationData: InsertNotification): Promise<Notification> {
+    const id = notificationData.id as string | undefined;
+    let createdId = id;
+    if (!createdId) createdId = crypto.randomUUID();
+    await db.insert(notifications).values({ ...notificationData, id: createdId });
     const [notification] = await db
-      .insert(notifications)
-      .values(notificationData)
-      .returning();
-    return notification;
+      .select()
+      .from(notifications)
+      .where(eq(notifications.id, createdId));
+    return notification!;
   }
 
   async getUserNotifications(userId: string): Promise<Notification[]> {

@@ -12,6 +12,9 @@ import FAQ from "@/pages/FAQ";
 import Safety from "@/pages/Safety";
 import Dashboard from "@/pages/Dashboard";
 import NotFound from "@/pages/not-found";
+import Post from "@/pages/Post";
+import Report from "@/pages/Report";
+import LoginDialog from "@/components/LoginDialog";
 
 function Router() {
   return (
@@ -20,7 +23,12 @@ function Router() {
       <Route path="/browse" component={Browse} />
       <Route path="/faq" component={FAQ} />
       <Route path="/safety" component={Safety} />
-      <Route path="/dashboard" component={Dashboard} />
+      <Route path="/post" component={Post} />
+      <Route path="/post/:id" component={Post} />
+      <Route path="/report" component={Report} />
+      <Route path="/dashboard">
+        <Dashboard />
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );
@@ -38,6 +46,7 @@ function App() {
             </main>
             <Footer />
           </div>
+          <LoginDialog />
           <Toaster />
         </TooltipProvider>
       </ThemeProvider>

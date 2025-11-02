@@ -1,14 +1,32 @@
 import StatsCard from "@/components/StatsCard";
-import ItemCard from "@/components/ItemCard";
-import { Package, CheckCircle, TrendingUp, Award } from "lucide-react";
+import { Package, CheckCircle, TrendingUp, Award, Trash2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import walletImage from "@assets/generated_images/Lost_wallet_item_photo_ebc7ad65.png";
-import keysImage from "@assets/generated_images/Lost_keys_item_photo_bc6d5d42.png";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { getQueryFn, queryClient, apiRequest } from "@/lib/queryClient";
+import ItemCard from "@/components/ItemCard";
+import { Link } from "wouter";
 
-export default function Dashboard() {
+type DashboardProps = { compact?: boolean };
+
+export default function Dashboard({ compact = false }: DashboardProps) {
+  const { data: myItems, isLoading, error } = useQuery<any[] | null>({
+    queryKey: ["/api/user/items"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/items/${id}`);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/user/items"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/items"] });
+    },
+  });
+
   return (
-    <div className="min-h-screen py-8">
+    <div className={compact ? "py-6" : "min-h-screen py-8"}>
       <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
         <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold mb-2">Dashboard</h1>
@@ -16,8 +34,8 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <StatsCard title="Total Posts" value="2" icon={Package} />
-          <StatsCard title="Active Items" value="2" icon={TrendingUp} />
+          <StatsCard title="Total Posts" value="0" icon={Package} />
+          <StatsCard title="Active Items" value="0" icon={TrendingUp} />
           <StatsCard title="Successful Matches" value="0" icon={CheckCircle} />
           <StatsCard title="Karma Points" value="0" icon={Award} />
         </div>
@@ -32,30 +50,66 @@ export default function Dashboard() {
           <TabsContent value="my-posts" className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold">Your Posted Items</h2>
-              <Button data-testid="button-new-post">New Post</Button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <ItemCard
-                id="1"
-                title="Black Leather Wallet"
-                description="Lost black leather wallet with cards and ID inside. Last seen near Central Park."
-                category="Wallets & Purses"
-                location="Central Park, NY"
-                date="Oct 28, 2025"
-                imageUrl={walletImage}
-                status="lost"
-              />
-              <ItemCard
-                id="3"
-                title="Set of Keys"
-                description="Found keys with blue keychain near the subway station. Multiple keys on ring."
-                category="Keys"
-                location="Metro Station, NY"
-                date="Oct 30, 2025"
-                imageUrl={keysImage}
-                status="found"
-              />
-            </div>
+            {isLoading ? (
+              <div className="text-muted-foreground">Loading...</div>
+            ) : myItems === null ? (
+              <div className="flex items-center justify-between p-4 rounded-md border bg-muted/30">
+                <div>
+                  <div className="font-medium">Sign in to view and manage your posts</div>
+                  <div className="text-sm text-muted-foreground">Use Google or the default login.</div>
+                </div>
+                <div className="flex gap-2">
+                  <Button asChild>
+                    <a href="/api/login/google">Sign in with Google</a>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <a href="/api/login">Sign in</a>
+                  </Button>
+                </div>
+              </div>
+            ) : error ? (
+              <div className="text-red-600">Failed to load your items</div>
+            ) : (myItems?.length ?? 0) === 0 ? (
+              <div className="text-muted-foreground">You haven't posted any items yet.</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {myItems!.map((it) => (
+                  <div key={it.id} className="relative group">
+                    <ItemCard
+                      id={it.id}
+                      title={it.title}
+                      description={it.description}
+                      category={it.category}
+                      location={it.location}
+                      date={new Date(it.date).toDateString()}
+                      imageUrl={it.imageUrl || undefined}
+                      status={it.status}
+                    />
+                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                      <Link href={`/post/${it.id}`}>
+                        <Button size="sm" variant="secondary" asChild={false} data-testid={`button-edit-${it.id}`}>
+                          <span className="flex items-center">
+                            <Pencil className="w-4 h-4 mr-1" />
+                            Edit
+                          </span>
+                        </Button>
+                      </Link>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => deleteMutation.mutate(it.id)}
+                        disabled={deleteMutation.isPending}
+                        data-testid={`button-delete-${it.id}`}
+                      >
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="matches">

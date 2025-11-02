@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import path from "node:path";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
@@ -47,7 +48,15 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Serve uploaded files
+  app.use("/uploads", express.static(path.resolve("uploads")));
+
   const server = await registerRoutes(app);
+
+  // Ensure unmatched API routes return JSON 404 instead of falling through to HTML
+  app.use("/api/*", (_req, res) => {
+    res.status(404).json({ message: "Not Found" });
+  });
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -74,7 +83,7 @@ app.use((req, res, next) => {
   server.listen({
     port,
     host: "0.0.0.0",
-    reusePort: true,
+    reusePort: process.platform !== 'win32',
   }, () => {
     log(`serving on port ${port}`);
   });

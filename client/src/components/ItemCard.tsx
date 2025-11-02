@@ -12,6 +12,7 @@ interface ItemCardProps {
   imageUrl: string;
   status: "lost" | "found";
   aiMatch?: boolean;
+  onClick?: () => void;
 }
 
 export default function ItemCard({
@@ -23,9 +24,10 @@ export default function ItemCard({
   imageUrl,
   status,
   aiMatch = false,
+  onClick,
 }: ItemCardProps) {
   return (
-    <Card className="overflow-hidden hover-elevate cursor-pointer" data-testid={`card-item-${title.toLowerCase().replace(/\s/g, '-')}`}>
+    <Card className="overflow-hidden hover-elevate cursor-pointer" onClick={onClick} data-testid={`card-item-${title.toLowerCase().replace(/\s/g, '-')}`}>
       <div className="relative aspect-square">
         <img
           src={imageUrl}
