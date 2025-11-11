@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import SearchBar from "@/components/SearchBar";
 import FilterPanel from "@/components/FilterPanel";
 import ItemCard from "@/components/ItemCard";
@@ -17,19 +17,62 @@ export default function Browse() {
   const [loc, setRoute] = useLocation();
   const [selected, setSelected] = useState<any | null>(null);
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState<string>("");
 
-  const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-  const q = (params.get("q") || "").trim().toLowerCase();
-  const status = (params.get("status") || "").trim().toLowerCase();
-  const category = (params.get("category") || "").trim().toLowerCase();
-  const statusList = status ? status.split(",").map((s) => s.trim()).filter(Boolean) : [];
-  const categoryList = category ? category.split(",").map((s) => s.trim()).filter(Boolean) : [];
-  const locationText = (params.get("location") || "").trim().toLowerCase();
-  const from = params.get("from");
-  const to = params.get("to");
-  const radiusKm = params.get("radiusKm");
+  // Track querystring changes (pushState/replaceState and back/forward)
+  useEffect(() => {
+    const update = () => setSearch(window.location.search || "");
+    update();
+    const origPush = history.pushState;
+    const origReplace = history.replaceState;
+    (history as any).pushState = function (...args: any[]) {
+      const ret = origPush.apply(history as any, args as any);
+      window.dispatchEvent(new Event("locationchange"));
+      return ret;
+    } as any;
+    (history as any).replaceState = function (...args: any[]) {
+      const ret = origReplace.apply(history as any, args as any);
+      window.dispatchEvent(new Event("locationchange"));
+      return ret;
+    } as any;
+    window.addEventListener("popstate", update);
+    window.addEventListener("locationchange", update);
+    return () => {
+      window.removeEventListener("popstate", update);
+      window.removeEventListener("locationchange", update);
+      history.pushState = origPush;
+      history.replaceState = origReplace;
+    };
+  }, []);
 
-  const filtered = (items ?? []).filter((it) => {
+  // Parse query params from actual URL search to ensure consistency with FilterPanel
+  const { q, statusList, categoryList, locationText, from, to, radiusKm, highlight } = useMemo(() => {
+    const params = new URLSearchParams(search);
+    const q = (params.get("q") || "").trim().toLowerCase();
+    const status = (params.get("status") || "").trim().toLowerCase();
+    const category = (params.get("category") || "").trim().toLowerCase();
+    const statusList = status ? status.split(",").map((s) => s.trim()).filter(Boolean) : [];
+    const categoryList = category ? category.split(",").map((s) => s.trim()).filter(Boolean) : [];
+    const locationText = (params.get("location") || "").trim().toLowerCase();
+    const from = params.get("from");
+    const to = params.get("to");
+    const radiusKm = params.get("radiusKm");
+    const highlight = params.get("highlight");
+    return { q, statusList, categoryList, locationText, from, to, radiusKm, highlight };
+  }, [search]);
+
+  // Auto-open item details when highlight parameter is present
+  useEffect(() => {
+    if (highlight && items && !open) {
+      const highlightedItem = items.find(item => item.id === highlight);
+      if (highlightedItem) {
+        setSelected(highlightedItem);
+        setOpen(true);
+      }
+    }
+  }, [highlight, items, open]);
+
+  const filtered = useMemo(() => (items ?? []).filter((it) => {
     const title = String(it.title || "").toLowerCase();
     const desc = String(it.description || "").toLowerCase();
     const locStr = String(it.location || "").toLowerCase();
@@ -45,7 +88,7 @@ export default function Browse() {
     if (to && date && date > new Date(to)) return false;
     // radiusKm omitted: no geo coords available yet
     return true;
-  });
+  }), [items, q, statusList, categoryList, locationText, from, to, radiusKm]);
 
   return (
     <div className="min-h-screen py-8">
@@ -74,7 +117,7 @@ export default function Browse() {
               </p>
             </div>
 
-            {(q || status || category || locationText || from || to || radiusKm) && (
+            {(q || statusList.length || categoryList.length || locationText || from || to || radiusKm) && (
               <div className="flex flex-wrap items-center gap-2 mb-6">
                 {q && <Badge variant="secondary">Query: {q}</Badge>}
                 {statusList.map((s) => (
@@ -91,20 +134,24 @@ export default function Browse() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {!isLoading && filtered.map((it) => (
-                <ItemCard
-                  key={it.id}
-                  id={it.id}
-                  title={it.title}
-                  description={it.description}
-                  category={it.category}
-                  location={it.location}
-                  date={new Date(it.date).toDateString()}
-                  imageUrl={it.imageUrl || undefined}
-                  status={it.status}
-                  onClick={() => { setSelected(it); setOpen(true); }}
-                />
+                <div 
+                  key={it.id} 
+                  className={`${highlight === it.id ? 'ring-2 ring-primary ring-offset-2 rounded-lg' : ''}`}
+                >
+                  <ItemCard
+                    id={it.id}
+                    title={it.title}
+                    description={it.description}
+                    category={it.category}
+                    location={it.location}
+                    date={new Date(it.date).toDateString()}
+                    imageUrl={it.imageUrl || undefined}
+                    status={it.status}
+                    onClick={() => { setSelected(it); setOpen(true); }}
+                  />
+                </div>
               ))}
             </div>
           </div>

@@ -1,14 +1,17 @@
-import { useRef, useState } from "react";
-import { useLocation } from "wouter";
-import { apiRequest } from "@/lib/queryClient";
+import { useRef, useState, useEffect } from "react";
+import { useLocation, useRoute } from "wouter";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function Report() {
   const [, navigate] = useLocation();
+  const [isEdit, params] = useRoute("/report/:id");
+  const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -28,6 +31,48 @@ export default function Report() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  // Auto-fill contact information from user profile when not editing
+  useEffect(() => {
+    if (user && !isEdit && !contactName && !contactPhone) {
+      const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
+      if (fullName) {
+        setContactName(fullName);
+      }
+      if (user.phone) {
+        setContactPhone(user.phone);
+      }
+    }
+  }, [user, isEdit, contactName, contactPhone]);
+
+  // Load existing item if in edit mode
+  // Use the id value in the dependency array so the effect doesn't run on
+  // every render due to params object identity changes. This prevents
+  // overwriting user edits while typing.
+  const editId = params?.id;
+  useEffect(() => {
+    async function load() {
+      if (!isEdit) return;
+      try {
+        setError(null);
+        const res = await fetch(`/api/items/${editId}`, { credentials: "include" });
+        if (!res.ok) throw new Error(await res.text());
+        const item = await res.json();
+        setTitle(item.title || "");
+        setDescription(item.description || "");
+        setCategory(item.category || "");
+        setLoc(item.location || "");
+        const d = item.date ? new Date(item.date) : null;
+        setDate(d && !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : "");
+        setImageUrl(item.imageUrl || undefined);
+        setContactName(item.contactName || "");
+        setContactPhone(item.contactPhone || "");
+      } catch (e: any) {
+        setError(typeof e?.message === 'string' ? e.message : 'Failed to load item');
+      }
+    }
+    load();
+  }, [isEdit, editId]);
+
   async function onPickLocation() {
     if (!navigator.geolocation) {
       setError("Geolocation is not supported by your browser");
@@ -36,29 +81,91 @@ export default function Report() {
     setError(null);
     await new Promise<void>((resolve) => {
       navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const { latitude, longitude } = pos.coords;
-          fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`)
-            .then((r) => r.json())
-            .then((data) => {
-              const city = data?.address?.city || data?.address?.town || data?.address?.village;
-              const suburb = data?.address?.suburb || data?.address?.neighbourhood;
-              const state = data?.address?.state;
-              const country = data?.address?.country_code?.toUpperCase();
-              const parts = [suburb, city, state, country].filter(Boolean);
-              setLoc(parts.join(", ") || data?.display_name || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-              resolve();
-            })
-            .catch(() => {
-              setLoc(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-              resolve();
-            });
+        async (pos) => {
+          const { latitude, longitude, accuracy } = pos.coords;
+          
+          try {
+            // Try multiple geocoding services for better accuracy
+            let locationString = "";
+            
+            // Primary: OpenStreetMap Nominatim (more detailed)
+            try {
+              const nominatimResponse = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`
+              );
+              const nominatimData = await nominatimResponse.json();
+              
+              if (nominatimData?.address) {
+                const addr = nominatimData.address;
+                // Build more accurate location string
+                const parts = [
+                  addr.house_number && addr.road ? `${addr.house_number} ${addr.road}` : addr.road,
+                  addr.suburb || addr.neighbourhood || addr.quarter,
+                  addr.city || addr.town || addr.village || addr.municipality,
+                  addr.state || addr.province,
+                  addr.country_code?.toUpperCase()
+                ].filter(Boolean);
+                
+                locationString = parts.join(", ");
+                
+                // If we have a good result, use it
+                if (locationString && parts.length >= 2) {
+                  const acc = Number.isFinite(accuracy) ? ` (~${Math.round(accuracy)}m accuracy)` : "";
+                  setLoc(`${locationString}${acc}`);
+                  resolve();
+                  return;
+                }
+              }
+            } catch (nominatimError) {
+              console.warn("Nominatim geocoding failed:", nominatimError);
+            }
+            
+            // Fallback: Use coordinates with basic reverse geocoding
+            try {
+              const basicResponse = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`
+              );
+              const basicData = await basicResponse.json();
+              
+              if (basicData?.display_name) {
+                // Extract meaningful parts from display_name
+                const displayParts = basicData.display_name.split(", ");
+                const meaningfulParts = displayParts.slice(0, 4).filter((part: string) => 
+                  !part.match(/^\d+$/) && // Remove pure numbers
+                  part.length > 1 && // Remove single characters
+                  !part.match(/^[A-Z]{2,3}$/) // Remove country codes
+                );
+                locationString = meaningfulParts.join(", ");
+              }
+            } catch (basicError) {
+              console.warn("Basic geocoding failed:", basicError);
+            }
+            
+            // Final fallback: coordinates only
+            if (!locationString) {
+              locationString = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+            }
+            
+            const acc = Number.isFinite(accuracy) ? ` (~${Math.round(accuracy)}m accuracy)` : "";
+            setLoc(`${locationString}${acc}`);
+            resolve();
+            
+          } catch (error) {
+            console.error("Location geocoding error:", error);
+            setLoc(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+            resolve();
+          }
         },
-        () => {
-          setError("Unable to retrieve your location");
+        (error) => {
+          console.error("Geolocation error:", error);
+          setError(`Unable to retrieve your location: ${error.message}`);
           resolve();
         },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        { 
+          enableHighAccuracy: true, 
+          timeout: 20000, // Increased timeout
+          maximumAge: 60000 // Allow cached location up to 1 minute
+        }
       );
     });
   }
@@ -163,19 +270,39 @@ export default function Report() {
         setLoading(false);
         return;
       }
-      const res = await apiRequest("POST", "/api/items", {
+      
+      // Require a photo when creating a new reported/found item.
+      if (!isEdit && !imageUrl) {
+        setError("Please attach a photo for reported/found items");
+        setLoading(false);
+        return;
+      }
+      const basePayload: any = {
         title,
         description,
         category,
         location,
         date,
         status: "found",
-        imageUrl,
-        contactName,
-        contactPhone,
-      });
-      const created = await res.json();
-      navigate(`/browse`);
+      };
+      if (imageUrl) basePayload.imageUrl = imageUrl;
+      if (contactName) basePayload.contactName = contactName;
+      if (contactPhone) basePayload.contactPhone = contactPhone;
+
+      if (isEdit) {
+        const res = await apiRequest("PUT", `/api/items/${params!.id}`, basePayload);
+        await res.json();
+        // Refresh item lists
+        await queryClient.invalidateQueries({ queryKey: ["/api/items"] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/user/items"] });
+        navigate(`/dashboard`);
+      } else {
+        const res = await apiRequest("POST", "/api/items", basePayload);
+        await res.json();
+        // Refresh browse list
+        await queryClient.invalidateQueries({ queryKey: ["/api/items"] });
+        navigate(`/browse`);
+      }
     } catch (err: any) {
       setError(err?.message || "Failed to report item");
     } finally {
@@ -185,7 +312,7 @@ export default function Report() {
 
   return (
     <div className="max-w-2xl mx-auto p-4 md:p-6">
-      <h1 className="text-2xl font-bold mb-4">Report Found Item</h1>
+      <h1 className="text-2xl font-bold mb-4">{isEdit ? 'Edit Found Item' : 'Report Found Item'}</h1>
       <form className="space-y-4" onSubmit={onSubmit}>
         <Input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} required />
 
@@ -273,7 +400,7 @@ export default function Report() {
           <Input placeholder="Phone" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} />
         </div>
         {error && <p className="text-red-600 text-sm">{error}</p>}
-        <Button type="submit" disabled={loading}>{loading ? "Reporting..." : "Report Item"}</Button>
+        <Button type="submit" disabled={loading}>{loading ? (isEdit ? "Saving..." : "Reporting...") : (isEdit ? "Update Found Item" : "Report Item")}</Button>
       </form>
     </div>
   );

@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { Search } from "lucide-react";
+import { Home } from "lucide-react";
 
 export default function Footer() {
   return (
@@ -8,7 +8,7 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <Search className="w-5 h-5 text-primary" />
+              <Home className="w-5 h-5 text-primary" />
               <span className="text-lg font-bold">FindIt</span>
             </div>
             <p className="text-sm text-muted-foreground">

@@ -11,6 +11,7 @@ import Browse from "@/pages/Browse";
 import FAQ from "@/pages/FAQ";
 import Safety from "@/pages/Safety";
 import Dashboard from "@/pages/Dashboard";
+import Profile from "@/pages/Profile";
 import NotFound from "@/pages/not-found";
 import Post from "@/pages/Post";
 import Report from "@/pages/Report";
@@ -26,9 +27,11 @@ function Router() {
       <Route path="/post" component={Post} />
       <Route path="/post/:id" component={Post} />
       <Route path="/report" component={Report} />
+      <Route path="/report/:id" component={Report} />
       <Route path="/dashboard">
         <Dashboard />
       </Route>
+      <Route path="/profile" component={Profile} />
       <Route component={NotFound} />
     </Switch>
   );

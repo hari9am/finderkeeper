@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test AI Matches</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        button { margin: 10px; padding: 10px; }
+        .result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .error { background-color: #ffebee; }
+        .success { background-color: #e8f5e8; }
+    </style>
+</head>
+<body>
+    <h1>AI Matches Debug Tool</h1>
+    
+    <button onclick="createSampleItems()">Create Sample Found Electronics Items</button>
+    <button onclick="testMatches()">Test Matches for Earpods</button>
+    <button onclick="listAllItems()">List All Items</button>
+    
+    <div id="results"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}:</strong> ${message}`;
+            document.getElementById('results').appendChild(div);
+        }
+
+        async function createSampleItems() {
+            try {
+                log('Creating sample found electronics items...');
+                const response = await fetch('/api/test/create-sample-items', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`✅ Created ${data.items.length} sample items`, 'success');
+                } else {
+                    const error = await response.text();
+                    log(`❌ Error: ${error}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Network error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testMatches() {
+            try {
+                log('Testing matches for earpods item...');
+                
+                // First get all items to find the earpods item ID
+                const itemsResponse = await fetch('/api/items');
+                const items = await itemsResponse.json();
+                
+                const earpodsItem = items.find(item => 
+                    item.title.toLowerCase().includes('earpods') || 
+                    item.title.toLowerCase().includes('earbuds')
+                );
+                
+                if (!earpodsItem) {
+                    log('❌ No earpods item found', 'error');
+                    return;
+                }
+                
+                log(`Found earpods item: "${earpodsItem.title}" (ID: ${earpodsItem.id})`);
+                
+                // Now test matches for this item
+                const matchesResponse = await fetch(`/api/items/${earpodsItem.id}/matches`);
+                
+                if (matchesResponse.ok) {
+                    const matchData = await matchesResponse.json();
+                    log(`✅ Found ${matchData.matches.length} matches for "${earpodsItem.title}"`, 'success');
+                    
+                    if (matchData.matches.length > 0) {
+                        matchData.matches.forEach(match => {
+                            log(`  - "${match.title}" (Score: ${(match._match.score * 100).toFixed(1)}%)`, 'success');
+                        });
+                    }
+                } else {
+                    const error = await matchesResponse.text();
+                    log(`❌ Error getting matches: ${error}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Network error: ${error.message}`, 'error');
+            }
+        }
+
+        async function listAllItems() {
+            try {
+                log('Listing all items...');
+                const response = await fetch('/api/items');
+                
+                if (response.ok) {
+                    const items = await response.json();
+                    log(`✅ Found ${items.length} total items`, 'success');
+                    
+                    const electronics = items.filter(item => item.category === 'Electronics');
+                    log(`📱 Electronics items: ${electronics.length}`, 'info');
+                    
+                    const lost = electronics.filter(item => item.status === 'lost');
+                    const found = electronics.filter(item => item.status === 'found');
+                    
+                    log(`  - Lost: ${lost.length} items`, 'info');
+                    log(`  - Found: ${found.length} items`, 'info');
+                    
+                    electronics.forEach(item => {
+                        log(`  ${item.status.toUpperCase()}: "${item.title}" at ${item.location}`, 'info');
+                    });
+                } else {
+                    const error = await response.text();
+                    log(`❌ Error: ${error}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Network error: ${error.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html>

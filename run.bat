@@ -20,9 +20,8 @@ goto :end
 :dev
 set NODE_ENV=development
 if "%PORT%"=="" set PORT=5000
-if "%DATABASE_URL%"=="" set DATABASE_URL=mysql://root:Cham8497%40@localhost:3306/finderskeepers
 if "%SESSION_SECRET%"=="" set SESSION_SECRET=dev-secret-please-change
-echo Using DATABASE_URL=%DATABASE_URL%
+if "%DATABASE_URL%"=="" echo [WARN] DATABASE_URL not set. Please configure your database connection.
 if "%REPL_ID%"=="" echo [WARN] REPL_ID not set. Auth will return 503.
 if "%REPL_SECRET%"=="" echo [WARN] REPL_SECRET not set. Auth will return 503.
 echo Starting development server on port %PORT%...
@@ -35,8 +34,8 @@ goto :end
 :prod
 set NODE_ENV=production
 if "%PORT%"=="" set PORT=5000
-if "%DATABASE_URL%"=="" set DATABASE_URL=mysql://root:Cham8497%40@localhost:3306/finderskeepers
 if "%SESSION_SECRET%"=="" set SESSION_SECRET=prod-secret-please-change
+if "%DATABASE_URL%"=="" echo [WARN] DATABASE_URL not set. Please configure your database connection.
 echo Building frontend and backend...
 npm run build
 if errorlevel 1 goto :end

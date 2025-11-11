@@ -5,9 +5,8 @@ import passport from "passport";
 import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import memoize from "memoizee";
-import MySQLSessionFactory from "express-mysql-session";
-import { pool } from "./db";
-import { storage } from "./storage";
+import MongoDBStore from "connect-mongodb-session";
+import { storage } from "./mongoStorage";
 
 const getIssuer = memoize(
   async () => {
@@ -22,21 +21,14 @@ const clientsByDomain = new Map<string, Client>();
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
-  const MySQLStore = MySQLSessionFactory(session);
-  const sessionStore = new MySQLStore(
+  const MongoStore = MongoDBStore(session);
+  const sessionStore = new MongoStore(
     {
-      expiration: sessionTtl,
-      createDatabaseTable: true,
-      schema: {
-        tableName: "sessions",
-        columnNames: {
-          session_id: "sid",
-          expires: "expire",
-          data: "sess",
-        },
-      },
-    },
-    pool as any,
+      uri: process.env.MONGODB_URI!,
+      databaseName: 'findit',
+      collection: 'sessions',
+      expires: sessionTtl,
+    }
   );
   return session({
     secret: process.env.SESSION_SECRET!,
@@ -53,6 +45,17 @@ export function getSession() {
   });
 }
 
+// Extract name from email (e.g., "harry.potter@gmail.com" -> "Harry")
+function extractNameFromEmail(email?: string): string | undefined {
+  if (!email) return undefined;
+  const localPart = email.split('@')[0];
+  // Remove numbers and special chars, split by dots/underscores
+  const namePart = localPart.replace(/[0-9]/g, '').split(/[._-]/)[0];
+  if (!namePart) return undefined;
+  // Capitalize first letter
+  return namePart.charAt(0).toUpperCase() + namePart.slice(1).toLowerCase();
+}
+
 function updateUserSession(user: any, tokens: TokenSet, claims: any) {
   user.claims = claims;
   user.access_token = tokens.access_token;
@@ -62,10 +65,11 @@ function updateUserSession(user: any, tokens: TokenSet, claims: any) {
 }
 
 async function upsertUser(claims: any) {
+  const extractedName = extractNameFromEmail(claims["email"]);
   await storage.upsertUser({
     id: claims["sub"],
     email: claims["email"],
-    firstName: claims["first_name"],
+    firstName: claims["first_name"] || extractedName,
     lastName: claims["last_name"],
     profileImageUrl: claims["profile_image_url"],
   });

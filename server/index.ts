@@ -1,7 +1,10 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express, { type Request, Response, NextFunction } from "express";
-import path from "node:path";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { connectToMongoDB } from "./mongodb";
 
 const app = express();
 
@@ -48,8 +51,8 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Serve uploaded files
-  app.use("/uploads", express.static(path.resolve("uploads")));
+  // Connect to MongoDB
+  await connectToMongoDB();
 
   const server = await registerRoutes(app);
 
@@ -80,11 +83,12 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
+  const host = process.env.LOCAL_ONLY === 'false' ? '0.0.0.0' : '127.0.0.1';
   server.listen({
     port,
-    host: "0.0.0.0",
+    host,
     reusePort: process.platform !== 'win32',
   }, () => {
-    log(`serving on port ${port}`);
+    log(`serving on ${host}:${port}`);
   });
 })();

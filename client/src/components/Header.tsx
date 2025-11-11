@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { Search, Menu, Moon, Sun, User, Plus, LogOut } from "lucide-react";
+import { Home, Menu, Moon, Sun, User, Plus, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -12,6 +12,7 @@ import {
 import { useTheme } from "./ThemeProvider";
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import NotificationBell from "./NotificationBell";
 
 export default function Header() {
   const { theme, toggleTheme } = useTheme();
@@ -24,7 +25,7 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-4">
           <Link href="/" className="flex items-center gap-2 hover-elevate rounded-md px-3 py-2" data-testid="link-home">
-            <Search className="w-6 h-6 text-primary" />
+            <Home className="w-6 h-6 text-primary" />
             <span className="text-xl font-bold">FindIt</span>
           </Link>
 
@@ -50,6 +51,8 @@ export default function Header() {
               {theme === "light" ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
             </Button>
 
+            <NotificationBell />
+
             <div className="hidden md:flex items-center gap-2">
               <Link href="/report">
                 <Button data-testid="button-post-item">
@@ -66,14 +69,26 @@ export default function Header() {
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="p-0 h-10 w-10 rounded-full" data-testid="button-user-menu">
                       <Avatar className="h-10 w-10">
-                        <AvatarImage src={user?.profileImageUrl || undefined} alt={user?.firstName || "U"} />
-                        <AvatarFallback>{(user?.firstName?.[0] || "U").toUpperCase()}</AvatarFallback>
+                        <AvatarImage src={user?.profileImageUrl || undefined} alt={user?.firstName || user?.email || "User"} />
+                        <AvatarFallback>
+                          {(user?.firstName?.[0] || user?.email?.[0] || "U").toUpperCase()}
+                        </AvatarFallback>
                       </Avatar>
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
+                  <DropdownMenuContent align="end" className="w-56">
+                    <div className="px-2 py-1.5">
+                      <p className="text-sm font-medium">
+                        {user?.firstName || user?.email?.split('@')[0] || "User"}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                    </div>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
                       <Link href="/dashboard">Dashboard</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/profile">Profile</Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
