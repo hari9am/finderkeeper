@@ -2,16 +2,26 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    // For now, return a simple response to avoid Rollup dependency issues
-    res.status(200).json({ 
-      status: 'ok', 
-      message: 'FindersKeepers API is running - deployment test successful',
-      timestamp: new Date().toISOString(),
-      note: 'Full Express app temporarily disabled due to Vercel build issues'
-    });
+    // Import the Express app with Rollup dependencies excluded
+    const { default: app } = await import('../dist/index.js');
+    
+    // Handle the request with the Express app
+    return app(req, res);
   } catch (error) {
-    console.error('API Error:', error);
-    res.status(500).json({ 
+    console.error('Serverless function error:', error);
+    
+    // Check if it's the Rollup dependency error
+    if (error instanceof Error && error.message.includes('Cannot find module @rollup')) {
+      // Return a helpful error message
+      return res.status(500).json({
+        error: 'Build Configuration Error',
+        message: 'The application is still using Rollup dependencies. Please rebuild the application.',
+        solution: 'Run: npm run build:vercel && vercel --prod'
+      });
+    }
+    
+    // Return a proper error response for other errors
+    return res.status(500).json({
       error: 'Internal Server Error',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
