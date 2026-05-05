@@ -4,8 +4,8 @@ let cachedApp: any = null;
 
 async function getApp() {
   if (!cachedApp) {
-    // Use require to avoid TypeScript declaration issues
-    const app = require('../dist/index.js');
+    // Use dynamic import for ES module compatibility
+    const app = await import('../dist/index.js');
     cachedApp = app.default || app;
   }
   return cachedApp;
