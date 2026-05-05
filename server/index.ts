@@ -82,13 +82,19 @@ app.use((req, res, next) => {
   // Other ports are firewalled. Default to 5000 if not specified.
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
-  const host = process.env.LOCAL_ONLY === 'false' ? '0.0.0.0' : '127.0.0.1';
-  server.listen({
-    port,
-    host,
-    reusePort: process.platform !== 'win32',
-  }, () => {
-    log(`serving on ${host}:${port}`);
-  });
+  // Skip server.listen() in Vercel serverless environment
+  if (!process.env.VERCEL) {
+    const port = parseInt(process.env.PORT || '5000', 10);
+    const host = process.env.LOCAL_ONLY === 'false' ? '0.0.0.0' : '127.0.0.1';
+    server.listen({
+      port,
+      host,
+      reusePort: process.platform !== 'win32',
+    }, () => {
+      log(`serving on ${host}:${port}`);
+    });
+  }
 })();
+
+// Export for Vercel serverless functions
+export default app;

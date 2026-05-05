@@ -5,6 +5,6 @@ export default defineConfig({
   schema: "./shared/schema.ts",
   dialect: "mongodb",
   dbCredentials: {
-    url: process.env.MONGO_URI || "mongodb://localhost:27017/finderskeepers",
+    url: process.env.MONGODB_URI || "mongodb://localhost:27017/finderskeepers",
   },
 });

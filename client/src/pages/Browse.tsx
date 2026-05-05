@@ -14,6 +14,7 @@ export default function Browse() {
     queryKey: ["/api/items"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
+
   const [loc, setRoute] = useLocation();
   const [selected, setSelected] = useState<any | null>(null);
   const [open, setOpen] = useState(false);

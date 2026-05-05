@@ -610,8 +610,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!item) return res.status(404).json({ message: "Item not found" });
 
       const oppositeStatus = item.status === "lost" ? "found" : "lost";
-      // Consider same category first to narrow down
-      const candidates = await storage.getItems({ status: oppositeStatus, category: item.category });
+      // Get all items with opposite status (not just same category) for better matching
+      const allCandidates = await storage.getItems({ status: oppositeStatus });
+      
+      // Prioritize same category but include others
+      const sameCategoryCandidates = allCandidates.filter(c => c.category === item.category);
+      const otherCandidates = allCandidates.filter(c => c.category !== item.category);
+      const candidates = [...sameCategoryCandidates, ...otherCandidates.slice(0, 10)]; // Include up to 10 from other categories
 
       // Ensure we have an embedding for the source item (best-effort)
       let itemEmbedding = (item as any).embedding as number[] | undefined;
@@ -636,19 +641,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .map((c) => {
           const cEmbedding = (c as any).embedding as number[] | undefined;
           const sim = itemEmbedding && cEmbedding ? cosineSimilarity(itemEmbedding, cEmbedding) : 0;
+          
+          // Word overlap scoring
           let overlap = 0;
           for (const w of words(c.title + " " + c.description)) {
             if (itemWords.has(w)) overlap++;
           }
-          // Combine similarity and heuristic overlap
-          const score = sim + Math.min(overlap, 5) * 0.05; // small boost for word overlap
-          return { item: c, score, sim, overlap };
+          
+          // Category match bonus
+          const categoryMatch = item.category === c.category ? 0.15 : 0;
+          
+          // Title similarity bonus (for simple cases like "id" matching "id")
+          const titleMatch = item.title.toLowerCase() === c.title.toLowerCase() ? 0.20 : 0;
+          
+          // Location proximity bonus
+          let locationMatch = 0;
+          if (item.location && c.location) {
+            const itemLoc = item.location.toLowerCase();
+            const cLoc = c.location.toLowerCase();
+            
+            // Exact location match
+            if (itemLoc === cLoc) {
+              locationMatch = 0.25;
+            } else {
+              // Check for common location keywords
+              const itemLocWords = new Set(itemLoc.split(/[^a-z0-9]+/).filter(Boolean));
+              const cLocWords = new Set(cLoc.split(/[^a-z0-9]+/).filter(Boolean));
+              
+              let commonWords = 0;
+              for (const word of itemLocWords) {
+                if (cLocWords.has(word) && word.length > 2) { // Only count meaningful words
+                  commonWords++;
+                }
+              }
+              
+              // Partial location match bonus
+              if (commonWords > 0) {
+                locationMatch = Math.min(commonWords * 0.08, 0.20); // Max 0.20 for partial matches
+              }
+            }
+          }
+          
+          // Combine all scoring factors
+          const score = sim + Math.min(overlap, 5) * 0.05 + categoryMatch + titleMatch + locationMatch;
+          return { item: c, score, sim, overlap, categoryMatch, titleMatch, locationMatch };
         })
         .sort((a, b) => b.score - a.score)
         .slice(0, 20);
 
-      // Apply a reasonable threshold to filter weak matches
-      const threshold = 0.10; // Further lowered threshold for better matching
+      // Apply a very low threshold to ensure basic matches work
+      const threshold = 0.01; // Very low threshold to catch simple matches
       const results = scored.filter((s) => s.score >= threshold).map(({ item, score, sim, overlap }) => ({
         ...item,
         _match: { score, similarity: sim, overlap },
@@ -662,7 +704,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         title: s.item.title, 
         score: s.score.toFixed(3), 
         sim: s.sim.toFixed(3), 
-        overlap: s.overlap 
+        overlap: s.overlap,
+        categoryMatch: s.categoryMatch?.toFixed(3) || '0.000',
+        titleMatch: s.titleMatch?.toFixed(3) || '0.000',
+        locationMatch: s.locationMatch?.toFixed(3) || '0.000'
       })));
       console.log(`[MATCHES DEBUG] Final results: ${results.length} matches (threshold: ${threshold})`);
 
@@ -670,6 +715,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (err) {
       console.error("matches error", err);
       res.status(500).json({ message: "Failed to compute matches" });
+    }
+  });
+
+  // Debug endpoint to test matching algorithm
+  app.get("/api/debug/matches/:id", async (req, res) => {
+    try {
+      const { id } = req.params as { id: string };
+      const item = await storage.getItem(id);
+      if (!item) return res.status(404).json({ message: "Item not found" });
+
+      const oppositeStatus = item.status === "lost" ? "found" : "lost";
+      const allItems = await storage.getItems();
+      const candidates = allItems.filter(c => c.status === oppositeStatus);
+      
+      console.log(`[DEBUG] Source item: "${item.title}" (${item.status}) in "${item.category}" at "${item.location}"`);
+      console.log(`[DEBUG] Found ${candidates.length} ${oppositeStatus} items to compare against`);
+      
+      const debugResults = candidates.map(c => {
+        const categoryMatch = item.category === c.category ? 0.15 : 0;
+        const titleMatch = item.title.toLowerCase() === c.title.toLowerCase() ? 0.20 : 0;
+        
+        let locationMatch = 0;
+        if (item.location && c.location) {
+          const itemLoc = item.location.toLowerCase();
+          const cLoc = c.location.toLowerCase();
+          if (itemLoc === cLoc) {
+            locationMatch = 0.25;
+          } else {
+            const itemLocWords = new Set(itemLoc.split(/[^a-z0-9]+/).filter(Boolean));
+            const cLocWords = new Set(cLoc.split(/[^a-z0-9]+/).filter(Boolean));
+            let commonWords = 0;
+            for (const word of itemLocWords) {
+              if (cLocWords.has(word) && word.length > 2) {
+                commonWords++;
+              }
+            }
+            if (commonWords > 0) {
+              locationMatch = Math.min(commonWords * 0.08, 0.20);
+            }
+          }
+        }
+        
+        const totalScore = categoryMatch + titleMatch + locationMatch;
+        
+        return {
+          id: c.id,
+          title: c.title,
+          category: c.category,
+          location: c.location,
+          categoryMatch: categoryMatch.toFixed(3),
+          titleMatch: titleMatch.toFixed(3),
+          locationMatch: locationMatch.toFixed(3),
+          totalScore: totalScore.toFixed(3),
+          passesThreshold: totalScore >= 0.01
+        };
+      }).sort((a, b) => parseFloat(b.totalScore) - parseFloat(a.totalScore));
+      
+      res.json({
+        sourceItem: {
+          id: item.id,
+          title: item.title,
+          category: item.category,
+          location: item.location,
+          status: item.status
+        },
+        candidates: debugResults,
+        threshold: 0.01
+      });
+    } catch (err) {
+      console.error("debug matches error", err);
+      res.status(500).json({ message: "Failed to debug matches" });
     }
   });
 

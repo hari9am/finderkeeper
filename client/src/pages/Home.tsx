@@ -19,6 +19,7 @@ export default function Home() {
     queryKey: ["/api/items"],
     queryFn: getQueryFn({ on401: "throw" }),
   });
+
   const searchQuery = useMemo(() => {
     try {
       const params = new URLSearchParams(window.location.search);

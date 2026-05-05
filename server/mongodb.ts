@@ -15,18 +15,16 @@ export async function connectToMongoDB() {
   const MONGODB_URI = process.env.MONGODB_URI;
 
   try {
-    // Determine connection options based on URI
-    const isAtlas = MONGODB_URI.includes('mongodb+srv://');
-    const connectionOptions = isAtlas 
-      ? {
-          dbName: 'findit',
-          ssl: true,
-          tls: true,
-          tlsInsecure: false,
-        }
-      : {
-          dbName: 'findit',
-        };
+    // For MongoDB Atlas, use authSource and proper SSL configuration
+    const connectionOptions = {
+      dbName: 'finderskeepers',
+      ssl: true,
+      tls: true,
+      tlsInsecure: false,
+      authSource: 'admin',
+      retryWrites: true,
+      w: 'majority'
+    };
 
     await mongoose.connect(MONGODB_URI, connectionOptions);
     isConnected = true;

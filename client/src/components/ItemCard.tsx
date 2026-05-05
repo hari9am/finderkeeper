@@ -16,6 +16,7 @@ interface ItemCardProps {
 }
 
 export default function ItemCard({
+  id,
   title,
   description,
   category,
@@ -41,11 +42,6 @@ export default function ItemCard({
         >
           {status === "lost" ? "Lost" : "Found"}
         </Badge>
-        {aiMatch && (
-          <Badge className="absolute top-2 right-2 bg-purple-600 text-white text-xs" data-testid="badge-ai-match">
-            AI Match
-          </Badge>
-        )}
       </div>
       <CardContent className="p-3">
         <h3 className="font-semibold text-base line-clamp-1 mb-2" data-testid="text-item-title">
