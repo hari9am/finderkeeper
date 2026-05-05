@@ -1,15 +1,5 @@
 {
   "version": 2,
   "buildCommand": "npm run build:vercel",
-  "outputDirectory": "dist",
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/serverless"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/api/serverless"
-    }
-  ]
+  "outputDirectory": "dist"
 }
