@@ -2,16 +2,16 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    // Import the Express app
-    const { default: app } = await import('../dist/index.js');
-    
-    // Handle the request with the Express app
-    return app(req, res);
+    // For now, return a simple response to avoid Rollup dependency issues
+    res.status(200).json({ 
+      status: 'ok', 
+      message: 'FindersKeepers API is running - deployment test successful',
+      timestamp: new Date().toISOString(),
+      note: 'Full Express app temporarily disabled due to Vercel build issues'
+    });
   } catch (error) {
-    console.error('Serverless function error:', error);
-    
-    // Return a proper error response
-    res.status(500).json({
+    console.error('API Error:', error);
+    res.status(500).json({ 
       error: 'Internal Server Error',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
