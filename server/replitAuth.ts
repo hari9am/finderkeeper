@@ -25,7 +25,7 @@ export function getSession() {
   const sessionStore = new MongoStore(
     {
       uri: process.env.MONGODB_URI!,
-      databaseName: 'findit',
+      databaseName: 'finderskeepers',
       collection: 'sessions',
       expires: sessionTtl,
     }

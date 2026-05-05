@@ -122,7 +122,7 @@
   "optionalDependencies": {
     "@rollup/rollup-darwin-x64": "^4.60.1",
     "@rollup/rollup-linux-arm64-gnu": "^4.60.1",
-    "@rollup/rollup-linux-x64-gnu": "^4.60.1",
+    "@rollup/rollup-linux-x64-gnu": "^4.60.3",
     "@rollup/rollup-win32-x64-msvc": "^4.60.1",
     "bufferutil": "^4.0.8"
   }
