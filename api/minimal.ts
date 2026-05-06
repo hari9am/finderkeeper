@@ -9,17 +9,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     app.use(express.json());
 
-    // API routes
+    // API routes - add all endpoints the frontend expects
     app.get('/api/health', (req, res) => {
       res.json({ status: 'ok', message: 'FindersKeepers API is working' });
     });
 
     app.get('/api/items', (req, res) => {
-      res.json({ items: [], message: 'Items endpoint working' });
+      res.json([]);
+    });
+
+    app.get('/api/auth/user', (req, res) => {
+      // Return 401 so frontend knows user is not logged in
+      res.status(401).json({ message: 'Not authenticated' });
+    });
+
+    app.get('/api/user/items', (req, res) => {
+      res.json([]);
+    });
+
+    app.get('/api/user/notifications', (req, res) => {
+      res.json([]);
+    });
+
+    app.get('/api/user/notifications/count', (req, res) => {
+      res.json({ count: 0 });
     });
 
     app.get('/api/user', (req, res) => {
-      res.json({ user: null, message: 'User endpoint working' });
+      res.status(401).json({ message: 'Not authenticated' });
     });
 
     // Serve static React app
