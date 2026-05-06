@@ -40,15 +40,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     app.get('/api/login/google', (req, res) => {
-      // Redirect to Google OAuth
-      const clientId = process.env.GOOGLE_CLIENT_ID;
-      const redirectUri = `${process.env.PUBLIC_ORIGIN || 'https://findit-ten.vercel.app'}/api/callback/google`;
-      const scope = encodeURIComponent('openid email profile');
-      const state = Buffer.from(Math.random().toString()).toString('base64');
-      
-      const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&state=${state}&prompt=select_account`;
-      
-      res.redirect(googleAuthUrl);
+      try {
+        const clientId = process.env.GOOGLE_CLIENT_ID;
+        if (!clientId) {
+          return res.status(503).json({ message: 'Google OAuth not configured. Set GOOGLE_CLIENT_ID environment variable.' });
+        }
+        const redirectUri = `${process.env.PUBLIC_ORIGIN || 'https://findit-ten.vercel.app'}/api/callback/google`;
+        const scope = encodeURIComponent('openid email profile');
+        const state = Buffer.from(Math.random().toString()).toString('base64');
+        
+        const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&state=${state}&prompt=select_account`;
+        
+        res.redirect(googleAuthUrl);
+      } catch (error) {
+        console.error('Google login error:', error);
+        res.status(500).json({ message: 'Login failed', error: error instanceof Error ? error.message : 'Unknown error' });
+      }
     });
 
     app.get('/api/callback/google', (req, res) => {
