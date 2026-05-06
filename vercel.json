@@ -12,6 +12,10 @@
     {
       "src": "api/simple.ts",
       "use": "@vercel/node"
+    },
+    {
+      "src": "api/minimal.ts",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
@@ -22,6 +26,10 @@
     {
       "src": "/api/simple",
       "dest": "/api/simple.ts"
+    },
+    {
+      "src": "/api/minimal",
+      "dest": "/api/minimal.ts"
     },
     {
       "src": "/(.*)",
