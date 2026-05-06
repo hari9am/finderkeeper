@@ -9,6 +9,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     app.use(express.json());
 
+    // Request logging middleware
+    app.use((req, res, next) => {
+      console.log(`[REQUEST] ${req.method} ${req.url} | path: ${req.path}`);
+      next();
+    });
+
     // API routes - add all endpoints the frontend expects
     app.get('/api/health', (req, res) => {
       res.json({ status: 'ok', message: 'FindersKeepers API is working' });
