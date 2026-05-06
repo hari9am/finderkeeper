@@ -39,6 +39,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(401).json({ message: 'Not authenticated' });
     });
 
+    app.get('/api/login/google', (req, res) => {
+      // Redirect to Google OAuth
+      const clientId = process.env.GOOGLE_CLIENT_ID;
+      const redirectUri = `${process.env.PUBLIC_ORIGIN || 'https://findit-ten.vercel.app'}/api/callback/google`;
+      const scope = encodeURIComponent('openid email profile');
+      const state = Buffer.from(Math.random().toString()).toString('base64');
+      
+      const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&state=${state}&prompt=select_account`;
+      
+      res.redirect(googleAuthUrl);
+    });
+
+    app.get('/api/callback/google', (req, res) => {
+      // For now, redirect back to home after OAuth callback
+      // Full implementation would exchange code for tokens here
+      res.redirect('/');
+    });
+
+    app.get('/api/logout', (req, res) => {
+      res.redirect('/');
+    });
+
     // Serve static React app
     const distPath = path.resolve(process.cwd(), 'dist', 'public');
     console.log('Serving static files from:', distPath);
