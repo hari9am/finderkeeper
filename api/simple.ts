@@ -2,28 +2,38 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    // Simple health check response
-    if (req.method === 'GET' && req.url === '/') {
-      return res.status(200).json({
-        message: 'FindersKeepers API is working!',
-        timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV || 'development'
-      });
+    console.log('Simple endpoint called');
+    
+    // Set environment variable for Vercel
+    process.env.VERCEL = 'true';
+    
+    // Test basic Express import
+    console.log('Testing Express import...');
+    const express = await import('express');
+    console.log('Express imported successfully');
+    
+    // Test importing the built app
+    console.log('Testing app import...');
+    const appModule = await import('../dist/index.js');
+    console.log('App module imported:', typeof appModule);
+    
+    const app = appModule.default || appModule;
+    console.log('App extracted:', typeof app);
+    
+    // If we get here, try to use the app
+    if (typeof app === 'function') {
+      console.log('Calling Express app...');
+      return app(req, res);
+    } else {
+      throw new Error('App is not a function');
     }
-
-    // For now, return a simple response for all routes
-    return res.status(200).json({
-      message: 'API endpoint working',
-      method: req.method,
-      url: req.url,
-      timestamp: new Date().toISOString()
-    });
-
+    
   } catch (error) {
-    console.error('API Error:', error);
-    return res.status(500).json({
-      error: 'Internal Server Error',
+    console.error('Simple endpoint error:', error);
+    res.status(500).json({
+      error: 'Simple endpoint failed',
       message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
       timestamp: new Date().toISOString()
     });
   }
