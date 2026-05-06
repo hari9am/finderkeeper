@@ -19,18 +19,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.json({ items: [], message: 'Items endpoint working' });
     });
     
-    // Catch all route
-    app.use('*', (req, res) => {
-      res.json({ 
+    // Handle based on the original URL
+    const originalUrl = req.url || '/';
+    
+    if (originalUrl === '/health') {
+      return res.json({ status: 'ok', message: 'Minimal Express app working' });
+    } else if (originalUrl === '/api/items') {
+      return res.json({ items: [], message: 'Items endpoint working' });
+    } else {
+      return res.json({ 
         message: 'FindersKeepers API is working!',
         method: req.method,
-        path: req.path,
+        path: originalUrl,
         timestamp: new Date().toISOString()
       });
-    });
-    
-    // Handle the request
-    return app(req, res);
+    }
     
   } catch (error) {
     console.error('Minimal endpoint error:', error);
