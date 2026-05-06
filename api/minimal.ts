@@ -42,19 +42,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     app.get('/api/login/google', (req, res) => {
       try {
         const clientId = process.env.GOOGLE_CLIENT_ID;
+        console.log('GOOGLE_CLIENT_ID present:', !!clientId);
         if (!clientId) {
-          return res.status(503).json({ message: 'Google OAuth not configured. Set GOOGLE_CLIENT_ID environment variable.' });
+          return res.status(503).json({ message: 'Google OAuth not configured' });
         }
-        const redirectUri = `${process.env.PUBLIC_ORIGIN || 'https://findit-ten.vercel.app'}/api/callback/google`;
+        const origin = process.env.PUBLIC_ORIGIN || 'https://findit-ten.vercel.app';
+        const redirectUri = `${origin}/api/callback/google`;
         const scope = encodeURIComponent('openid email profile');
-        const state = Buffer.from(Math.random().toString()).toString('base64');
+        const state = Math.random().toString(36).substring(2);
         
         const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&state=${state}&prompt=select_account`;
         
-        res.redirect(googleAuthUrl);
+        return res.redirect(googleAuthUrl);
       } catch (error) {
         console.error('Google login error:', error);
-        res.status(500).json({ message: 'Login failed', error: error instanceof Error ? error.message : 'Unknown error' });
+        return res.status(500).json({ message: 'Login failed', error: error instanceof Error ? error.message : 'Unknown error' });
       }
     });
 
