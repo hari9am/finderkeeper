@@ -12,18 +12,22 @@ export async function connectToMongoDB() {
     return;
   }
 
-  const MONGODB_URI = process.env.MONGODB_URI;
+  const MONGODB_URI = process.env.MONGODB_URI?.trim();
+  console.log(`📡 MONGODB_URI (trimmed) starts with: ${MONGODB_URI?.substring(0, 15)}... (Length: ${MONGODB_URI?.length})`);
 
   try {
     // For MongoDB Atlas, use authSource and proper SSL configuration
-    const connectionOptions = {
+    const connectionOptions: mongoose.ConnectOptions = {
       dbName: 'finderskeepers',
       ssl: true,
       tls: true,
       tlsInsecure: false,
       authSource: 'admin',
       retryWrites: true,
-      w: 'majority'
+      w: 'majority',
+      serverSelectionTimeoutMS: 8000,
+      connectTimeoutMS: 8000,
+      socketTimeoutMS: 8000
     };
 
     await mongoose.connect(MONGODB_URI, connectionOptions);
