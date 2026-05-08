@@ -15,6 +15,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       next();
     });
 
+    // Simple test route
+    app.get('/api/test', (req, res) => {
+      res.json({ message: 'Test route works', path: req.path });
+    });
+
     // API routes - add all endpoints the frontend expects
     app.get('/api/health', (req, res) => {
       res.json({ status: 'ok', message: 'FindersKeepers API is working' });
