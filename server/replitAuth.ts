@@ -24,7 +24,7 @@ export function getSession() {
   const MongoStore = MongoDBStore(session);
   const sessionStore = new MongoStore(
     {
-      uri: process.env.MONGODB_URI!,
+      uri: process.env.MONGODB_URI?.trim()!,
       databaseName: 'finderskeepers',
       collection: 'sessions',
       expires: sessionTtl,
@@ -37,9 +37,9 @@ export function getSession() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      // Use secure cookies only in production; in local HTTP dev, secure cookies won't be sent
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      // Secure required for SameSite=None; Vercel always uses HTTPS
+      secure: true,
+      sameSite: "none",
       maxAge: sessionTtl,
     },
   });
