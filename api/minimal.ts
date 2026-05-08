@@ -57,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!clientId) {
           return res.status(503).json({ message: 'Google OAuth not configured' });
         }
-        const origin = process.env.PUBLIC_ORIGIN || 'https://findit-ten.vercel.app';
+        const origin = (process.env.PUBLIC_ORIGIN || 'https://findit-ten.vercel.app').trim();
         const redirectUri = `${origin}/api/callback/google`;
         const scope = encodeURIComponent('openid email profile');
         const state = Math.random().toString(36).substring(2);
