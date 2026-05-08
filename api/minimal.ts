@@ -29,9 +29,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.json([]);
     });
 
+    // Helper to get user from session cookie
+    function getUserFromSession(req: any) {
+      try {
+        const cookies = req.headers.cookie;
+        if (!cookies) return null;
+        const sessionMatch = cookies.match(/session=([^;]+)/);
+        if (!sessionMatch) return null;
+        const sessionData = JSON.parse(Buffer.from(sessionMatch[1], 'base64').toString('utf8'));
+        return sessionData;
+      } catch {
+        return null;
+      }
+    }
+
     app.get('/api/auth/user', (req, res) => {
-      // Return 401 so frontend knows user is not logged in
-      res.status(401).json({ message: 'Not authenticated' });
+      const user = getUserFromSession(req);
+      if (!user) {
+        return res.status(401).json({ message: 'Not authenticated' });
+      }
+      res.json({ id: user.id, email: user.email, name: user.name, picture: user.picture });
     });
 
     app.get('/api/user/items', (req, res) => {
@@ -47,7 +64,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     app.get('/api/user', (req, res) => {
-      res.status(401).json({ message: 'Not authenticated' });
+      const user = getUserFromSession(req);
+      if (!user) {
+        return res.status(401).json({ message: 'Not authenticated' });
+      }
+      res.json({ id: user.id, email: user.email, name: user.name, picture: user.picture });
     });
 
     app.get('/api/login/google', (req, res) => {
@@ -71,13 +92,86 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     });
 
-    app.get('/api/callback/google', (req, res) => {
-      // For now, redirect back to home after OAuth callback
-      // Full implementation would exchange code for tokens here
-      res.redirect('/');
+    app.get('/api/callback/google', async (req, res) => {
+      try {
+        const code = req.query.code as string;
+        const error = req.query.error as string;
+        
+        if (error) {
+          console.error('Google OAuth error:', error);
+          return res.redirect('/?error=oauth_denied');
+        }
+        
+        if (!code) {
+          return res.redirect('/?error=no_code');
+        }
+        
+        const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+        const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+        const origin = (process.env.PUBLIC_ORIGIN || 'https://findit-ten.vercel.app').trim();
+        const redirectUri = `${origin}/api/callback/google`;
+        
+        if (!clientId || !clientSecret) {
+          return res.redirect('/?error=oauth_not_configured');
+        }
+        
+        // Exchange code for tokens
+        const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            code,
+            client_id: clientId,
+            client_secret: clientSecret,
+            redirect_uri: redirectUri,
+            grant_type: 'authorization_code'
+          })
+        });
+        
+        if (!tokenResponse.ok) {
+          const errorText = await tokenResponse.text();
+          console.error('Token exchange failed:', errorText);
+          return res.redirect('/?error=token_exchange_failed');
+        }
+        
+        const tokenData = await tokenResponse.json();
+        
+        // Get user info from Google
+        const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+          headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
+        });
+        
+        if (!userResponse.ok) {
+          console.error('Failed to get user info');
+          return res.redirect('/?error=user_info_failed');
+        }
+        
+        const userData = await userResponse.json();
+        
+        // Create a simple session token (JWT-like)
+        const sessionData = {
+          id: userData.id,
+          email: userData.email,
+          name: userData.name,
+          picture: userData.picture,
+          iat: Date.now()
+        };
+        
+        // Set session cookie
+        const sessionToken = Buffer.from(JSON.stringify(sessionData)).toString('base64');
+        res.setHeader('Set-Cookie', `session=${sessionToken}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800`);
+        
+        // Redirect back to app
+        res.redirect('/');
+        
+      } catch (error) {
+        console.error('OAuth callback error:', error);
+        res.redirect('/?error=callback_error');
+      }
     });
 
     app.get('/api/logout', (req, res) => {
+      res.setHeader('Set-Cookie', 'session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
       res.redirect('/');
     });
 
