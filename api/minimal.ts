@@ -60,13 +60,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Image upload - parse multipart form-data and return data URL
     app.post('/api/upload', async (req, res) => {
       try {
-        // Simple multipart parser
         const contentType = req.headers['content-type'] || '';
+        console.log('[UPLOAD] content-type:', contentType);
+
         if (!contentType.includes('multipart/form-data')) {
           return res.status(400).json({ message: 'Expected multipart/form-data' });
         }
 
-        const boundary = contentType.split('boundary=')[1]?.replace(/"/g, '');
+        // Extract boundary, trim whitespace/semicolons
+        const boundary = contentType.split('boundary=')[1]?.replace(/"/g, '').trim().split(';')[0];
+        console.log('[UPLOAD] boundary:', boundary);
         if (!boundary) {
           return res.status(400).json({ message: 'Missing boundary' });
         }
@@ -80,18 +83,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
 
         const body = Buffer.concat(chunks);
+        console.log('[UPLOAD] body length:', body.length);
+
         const boundaryBuffer = Buffer.from(`--${boundary}`);
+        const closingBuffer = Buffer.from(`--${boundary}--`);
         const parts: Buffer[] = [];
         let start = 0;
+
         while (true) {
           const idx = body.indexOf(boundaryBuffer, start);
           if (idx === -1) break;
+
+          // Check if this is the first boundary marker
           if (parts.length > 0) {
-            const part = body.slice(start, idx - 2); // -2 for \r\n before boundary
-            if (part.length > 0) parts.push(part);
+            // Extract part between previous boundary and current one
+            let partEnd = idx;
+            // Skip \r\n or \n before boundary
+            if (partEnd > 0 && body[partEnd - 1] === 10) partEnd--;
+            if (partEnd > 0 && body[partEnd - 1] === 13) partEnd--;
+
+            const part = body.slice(start, partEnd);
+            if (part.length > 0) {
+              parts.push(part);
+              console.log('[UPLOAD] found part, length:', part.length);
+            }
           }
+
           start = idx + boundaryBuffer.length;
+          // Skip trailing \r\n after boundary
+          if (body[start] === 13 && body[start + 1] === 10) start += 2;
+          else if (body[start] === 10) start += 1;
+
+          // Check for closing boundary
+          if (body.indexOf(closingBuffer, idx) === idx) break;
         }
+
+        console.log('[UPLOAD] total parts:', parts.length);
 
         // Find the file part
         let fileBuffer: Buffer | null = null;
@@ -100,10 +127,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const headerEnd = part.indexOf(Buffer.from('\r\n\r\n'));
           if (headerEnd === -1) continue;
           const header = part.slice(0, headerEnd).toString('utf8');
-          if (header.includes('filename=') || header.includes('Content-Type: image/')) {
-            fileBuffer = part.slice(headerEnd + 4); // +4 for \r\n\r\n
+          console.log('[UPLOAD] part header:', header.substring(0, 200));
+
+          if (header.includes('filename=') || header.toLowerCase().includes('content-type: image/')) {
+            fileBuffer = part.slice(headerEnd + 4);
             const ctMatch = header.match(/Content-Type:\s*([^\r\n]+)/i);
             if (ctMatch) mimeType = ctMatch[1].trim();
+            console.log('[UPLOAD] found file, size:', fileBuffer.length, 'mime:', mimeType);
             break;
           }
         }
