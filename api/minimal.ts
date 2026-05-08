@@ -156,7 +156,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!user) {
         return res.status(401).json({ message: 'Not authenticated' });
       }
-      res.json({ id: user.id, email: user.email, name: user.name, picture: user.picture });
+      // Split name into firstName/lastName to match frontend expectations
+      const nameParts = user.name?.split(' ') || ['User'];
+      res.json({ 
+        id: user.id, 
+        email: user.email, 
+        firstName: nameParts[0], 
+        lastName: nameParts.slice(1).join(' ') || undefined,
+        phone: user.phone || undefined,
+        profileImageUrl: user.picture 
+      });
     });
 
     app.get('/api/user/items', (req, res) => {
@@ -176,7 +185,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!user) {
         return res.status(401).json({ message: 'Not authenticated' });
       }
-      res.json({ id: user.id, email: user.email, name: user.name, picture: user.picture });
+      const nameParts = user.name?.split(' ') || ['User'];
+      res.json({ 
+        id: user.id, 
+        email: user.email, 
+        firstName: nameParts[0], 
+        lastName: nameParts.slice(1).join(' ') || undefined,
+        phone: user.phone || undefined,
+        profileImageUrl: user.picture 
+      });
     });
 
     app.get('/api/login/google', (req, res) => {
