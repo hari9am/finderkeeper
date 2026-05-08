@@ -52,7 +52,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     app.get('/api/login/google', (req, res) => {
       try {
-        const clientId = process.env.GOOGLE_CLIENT_ID;
+        const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
         console.log('GOOGLE_CLIENT_ID present:', !!clientId);
         if (!clientId) {
           return res.status(503).json({ message: 'Google OAuth not configured' });
