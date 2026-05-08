@@ -179,9 +179,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           iat: Date.now()
         };
         
-        // Set session cookie
+        // Set session cookie - SameSite=None required for cross-site OAuth redirect
         const sessionToken = Buffer.from(JSON.stringify(sessionData)).toString('base64');
-        res.setHeader('Set-Cookie', `session=${sessionToken}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800`);
+        res.setHeader('Set-Cookie', `session=${sessionToken}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=604800`);
         
         // Redirect back to app
         res.redirect('/');
@@ -193,7 +193,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     app.get('/api/logout', (req, res) => {
-      res.setHeader('Set-Cookie', 'session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
+      res.setHeader('Set-Cookie', 'session=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0');
       res.redirect('/');
     });
 
