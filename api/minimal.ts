@@ -20,6 +20,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.json({ message: 'Test route works', path: req.path });
     });
 
+    // Debug cookies endpoint
+    app.get('/api/debug/cookies', (req, res) => {
+      const user = getUserFromSession(req);
+      res.json({
+        hasCookieHeader: !!req.headers.cookie,
+        cookieHeader: req.headers.cookie || 'none',
+        userFromSession: user,
+        timestamp: new Date().toISOString()
+      });
+    });
+
     // API routes - add all endpoints the frontend expects
     app.get('/api/health', (req, res) => {
       res.json({ status: 'ok', message: 'FindersKeepers API is working' });
