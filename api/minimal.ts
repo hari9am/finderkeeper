@@ -9,9 +9,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     app.use(express.json());
 
+    // Parse cookies manually for Vercel serverless
+    app.use((req: any, res, next) => {
+      req.cookies = {};
+      const cookieHeader = req.headers.cookie;
+      if (cookieHeader) {
+        cookieHeader.split(';').forEach((cookie: string) => {
+          const [name, ...rest] = cookie.trim().split('=');
+          if (name) req.cookies[name] = rest.join('=') || '';
+        });
+      }
+      next();
+    });
+
     // Request logging middleware
-    app.use((req, res, next) => {
-      console.log(`[REQUEST] ${req.method} ${req.url} | path: ${req.path}`);
+    app.use((req: any, res, next) => {
+      console.log(`[REQUEST] ${req.method} ${req.url} | cookies: ${Object.keys(req.cookies || {}).join(',')}`);
       next();
     });
 
@@ -43,11 +56,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Helper to get user from session cookie
     function getUserFromSession(req: any) {
       try {
-        const cookies = req.headers.cookie;
-        if (!cookies) return null;
-        const sessionMatch = cookies.match(/session=([^;]+)/);
-        if (!sessionMatch) return null;
-        const sessionData = JSON.parse(Buffer.from(sessionMatch[1], 'base64').toString('utf8'));
+        const sessionToken = req.cookies?.session;
+        if (!sessionToken) return null;
+        const sessionData = JSON.parse(Buffer.from(sessionToken, 'base64').toString('utf8'));
         return sessionData;
       } catch {
         return null;
