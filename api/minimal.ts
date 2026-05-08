@@ -53,6 +53,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.json([]);
     });
 
+    // Store items in memory (minimal mode - no MongoDB)
+    const itemsStore: any[] = [];
+    let itemIdCounter = 1;
+
+    // Image upload - accept base64 or multipart and return data URL
+    app.post('/api/upload', express.raw({ limit: '5mb', type: '*/*' }), (req, res) => {
+      try {
+        const base64 = Buffer.from(req.body).toString('base64');
+        const mimeType = req.headers['content-type'] || 'image/png';
+        const dataUrl = `data:${mimeType};base64,${base64}`;
+        res.json({ url: dataUrl });
+      } catch (error) {
+        res.status(500).json({ message: 'Upload failed' });
+      }
+    });
+
+    // Create item
+    app.post('/api/items', (req, res) => {
+      try {
+        const body = req.body;
+        const user = getUserFromSession(req);
+        const newItem = {
+          id: String(itemIdCounter++),
+          ...body,
+          userId: user?.id || 'anonymous',
+          createdAt: new Date().toISOString(),
+        };
+        itemsStore.push(newItem);
+        res.status(201).json(newItem);
+      } catch (error) {
+        res.status(500).json({ message: 'Failed to create item' });
+      }
+    });
+
     // Helper to get user from session cookie
     function getUserFromSession(req: any) {
       try {
