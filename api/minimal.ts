@@ -57,14 +57,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const itemsStore: any[] = [];
     let itemIdCounter = 1;
 
-    // Image upload - accept base64 or multipart and return data URL
-    app.post('/api/upload', express.raw({ limit: '5mb', type: '*/*' }), (req, res) => {
+    // Image upload - parse multipart form-data and return data URL
+    app.post('/api/upload', async (req, res) => {
       try {
-        const base64 = Buffer.from(req.body).toString('base64');
-        const mimeType = req.headers['content-type'] || 'image/png';
+        // Simple multipart parser
+        const contentType = req.headers['content-type'] || '';
+        if (!contentType.includes('multipart/form-data')) {
+          return res.status(400).json({ message: 'Expected multipart/form-data' });
+        }
+
+        const boundary = contentType.split('boundary=')[1]?.replace(/"/g, '');
+        if (!boundary) {
+          return res.status(400).json({ message: 'Missing boundary' });
+        }
+
+        // Collect raw body
+        const chunks: Buffer[] = [];
+        req.on('data', (chunk: Buffer) => chunks.push(chunk));
+        await new Promise<void>((resolve, reject) => {
+          req.on('end', resolve);
+          req.on('error', reject);
+        });
+
+        const body = Buffer.concat(chunks);
+        const boundaryBuffer = Buffer.from(`--${boundary}`);
+        const parts: Buffer[] = [];
+        let start = 0;
+        while (true) {
+          const idx = body.indexOf(boundaryBuffer, start);
+          if (idx === -1) break;
+          if (parts.length > 0) {
+            const part = body.slice(start, idx - 2); // -2 for \r\n before boundary
+            if (part.length > 0) parts.push(part);
+          }
+          start = idx + boundaryBuffer.length;
+        }
+
+        // Find the file part
+        let fileBuffer: Buffer | null = null;
+        let mimeType = 'image/png';
+        for (const part of parts) {
+          const headerEnd = part.indexOf(Buffer.from('\r\n\r\n'));
+          if (headerEnd === -1) continue;
+          const header = part.slice(0, headerEnd).toString('utf8');
+          if (header.includes('filename=') || header.includes('Content-Type: image/')) {
+            fileBuffer = part.slice(headerEnd + 4); // +4 for \r\n\r\n
+            const ctMatch = header.match(/Content-Type:\s*([^\r\n]+)/i);
+            if (ctMatch) mimeType = ctMatch[1].trim();
+            break;
+          }
+        }
+
+        if (!fileBuffer || fileBuffer.length === 0) {
+          return res.status(400).json({ message: 'No file found in upload' });
+        }
+
+        const base64 = fileBuffer.toString('base64');
         const dataUrl = `data:${mimeType};base64,${base64}`;
         res.json({ url: dataUrl });
       } catch (error) {
+        console.error('Upload error:', error);
         res.status(500).json({ message: 'Upload failed' });
       }
     });
