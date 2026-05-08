@@ -33,7 +33,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "/api/minimal.ts"
+      "dest": "/api/index.ts"
     }
   ]
 }
