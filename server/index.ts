@@ -3,7 +3,7 @@ dotenv.config();
 
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
+import { log } from "./utils";
 import { connectToMongoDB } from "./mongodb";
 
 const app = express();
@@ -50,11 +50,23 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
-  // Connect to MongoDB
-  await connectToMongoDB();
+// Promise that resolves once MongoDB + routes + static serving are all ready.
+// Vercel's api/index.ts must await this before handling any request.
+let _resolveReady!: () => void;
+export const appReady: Promise<void> = new Promise<void>((resolve) => {
+  _resolveReady = resolve;
+});
 
+(async () => {
+  console.log('🚀 Server starting...');
+  // Connect to MongoDB
+  console.log('🔌 Connecting to MongoDB...');
+  await connectToMongoDB();
+  console.log('✅ MongoDB connected');
+
+  console.log('🛣️ Registering routes...');
   const server = await registerRoutes(app);
+  console.log('✅ Routes registered');
 
   // Ensure unmatched API routes return JSON 404 instead of falling through to HTML
   app.use("/api/*", (_req, res) => {
@@ -73,15 +85,17 @@ app.use((req, res, next) => {
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (app.get("env") === "development") {
+    const { setupVite } = await import("./vite");
     await setupVite(app, server);
   } else {
+    // Serve static files in production (including Vercel serverless)
+    const { serveStatic } = await import("./vite");
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
+  // Signal that the app is fully initialized
+  _resolveReady();
+
   // Skip server.listen() in Vercel serverless environment
   if (!process.env.VERCEL) {
     const port = parseInt(process.env.PORT || '5000', 10);
