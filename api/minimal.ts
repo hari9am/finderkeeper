@@ -57,19 +57,97 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const itemsStore: any[] = [];
     let itemIdCounter = 1;
 
-    // Image upload - use multer to parse multipart form-data
-    const { default: multer } = await import('multer');
-    const uploadHandler = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
-
-    app.post('/api/upload', uploadHandler.single('image'), (req, res) => {
+    // Image upload - robust multipart parser
+    app.post('/api/upload', (req, res) => {
       try {
-        if (!req.file) {
-          return res.status(400).json({ message: 'No file uploaded' });
+        const contentType = req.headers['content-type'] || '';
+        if (!contentType.includes('multipart/form-data')) {
+          return res.status(400).json({ message: 'Expected multipart/form-data' });
         }
-        const base64 = req.file.buffer.toString('base64');
-        const mimeType = req.file.mimetype || 'image/png';
-        const dataUrl = `data:${mimeType};base64,${base64}`;
-        res.json({ url: dataUrl });
+
+        // Extract boundary - handle quoted and unquoted
+        let boundary = '';
+        const match = contentType.match(/boundary=([^;\s]*)/i);
+        if (match) boundary = match[1].replace(/^"|"$/g, '').trim();
+        if (!boundary) {
+          return res.status(400).json({ message: 'Missing boundary' });
+        }
+
+        // Collect raw body from stream
+        const chunks: Buffer[] = [];
+        req.on('data', (chunk: Buffer) => chunks.push(chunk));
+        req.on('end', () => {
+          try {
+            const body = Buffer.concat(chunks);
+            if (body.length === 0) {
+              return res.status(400).json({ message: 'Empty body' });
+            }
+
+            // Parse multipart
+            const delimiter = Buffer.from('\r\n--' + boundary);
+            let fileData: Buffer | null = null;
+            let mimeType = 'image/png';
+
+            // Find first occurrence of delimiter
+            let searchStart = 0;
+            while (true) {
+              const idx = body.indexOf(delimiter, searchStart);
+              if (idx === -1) break;
+
+              // Skip past this delimiter and its trailing \r\n
+              let partStart = idx + delimiter.length;
+              if (body[partStart] === 45 && body[partStart + 1] === 45) break; // closing --
+              if (body[partStart] === 13 && body[partStart + 1] === 10) partStart += 2;
+
+              // Find next delimiter
+              const nextIdx = body.indexOf(delimiter, partStart);
+              if (nextIdx === -1) break;
+
+              // Extract part content (between delimiters, excluding trailing \r\n)
+              let partEnd = nextIdx;
+              if (partEnd >= 2 && body[partEnd - 2] === 13 && body[partEnd - 1] === 10) {
+                partEnd -= 2;
+              }
+
+              const part = body.slice(partStart, partEnd);
+
+              // Split header from body
+              const headerEnd = part.indexOf(Buffer.from('\r\n\r\n'));
+              if (headerEnd === -1) {
+                searchStart = nextIdx + 1;
+                continue;
+              }
+
+              const header = part.slice(0, headerEnd).toString('utf8');
+              const content = part.slice(headerEnd + 4);
+
+              // Check if this part is a file
+              if (header.includes('filename=') || /Content-Type:\s*image\//i.test(header)) {
+                fileData = content;
+                const ctMatch = header.match(/Content-Type:\s*([^\r\n]+)/i);
+                if (ctMatch) mimeType = ctMatch[1].trim();
+                break;
+              }
+
+              searchStart = nextIdx + 1;
+            }
+
+            if (!fileData || fileData.length === 0) {
+              return res.status(400).json({ message: 'No file found in upload' });
+            }
+
+            const base64 = fileData.toString('base64');
+            const dataUrl = `data:${mimeType};base64,${base64}`;
+            res.json({ url: dataUrl });
+          } catch (parseError) {
+            console.error('Parse error:', parseError);
+            res.status(500).json({ message: 'Failed to parse upload' });
+          }
+        });
+        req.on('error', (err: any) => {
+          console.error('Stream error:', err);
+          res.status(500).json({ message: 'Upload stream error' });
+        });
       } catch (error) {
         console.error('Upload error:', error);
         res.status(500).json({ message: 'Upload failed' });
