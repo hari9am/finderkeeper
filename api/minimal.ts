@@ -73,14 +73,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ message: 'Missing boundary' });
         }
 
-        // Collect raw body from stream
-        const chunks: Buffer[] = [];
-        req.on('data', (chunk: Buffer) => chunks.push(chunk));
-        req.on('end', () => {
+        // Get raw body - Vercel may pre-buffer it into req.body
+        const getRawBody = (): Buffer => {
+          if (Buffer.isBuffer(req.body)) return req.body;
+          if (typeof req.body === 'string') return Buffer.from(req.body, 'utf8');
+          // Fallback: read from stream
+          const chunks: Buffer[] = [];
+          req.on('data', (chunk: Buffer) => chunks.push(chunk));
+          return Buffer.concat(chunks); // may be empty if stream already consumed
+        };
+
+        // Use a promise to read stream if needed
+        const readBody = (): Promise<Buffer> => {
+          if (Buffer.isBuffer(req.body) || typeof req.body === 'string') {
+            return Promise.resolve(Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body, 'utf8'));
+          }
+          return new Promise((resolve, reject) => {
+            const chunks: Buffer[] = [];
+            req.on('data', (chunk: Buffer) => chunks.push(chunk));
+            req.on('end', () => resolve(Buffer.concat(chunks)));
+            req.on('error', reject);
+            // If stream is already ended, 'end' won't fire
+            setTimeout(() => resolve(Buffer.concat(chunks)), 100);
+          });
+        };
+
+        readBody().then((body) => {
           try {
-            const body = Buffer.concat(chunks);
             if (body.length === 0) {
-              return res.status(400).json({ message: 'Empty body' });
+              return res.status(400).json({ message: 'Empty body - stream may have been consumed' });
             }
 
             // Parse multipart
@@ -143,9 +164,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             console.error('Parse error:', parseError);
             res.status(500).json({ message: 'Failed to parse upload' });
           }
-        });
-        req.on('error', (err: any) => {
-          console.error('Stream error:', err);
+        }).catch((err) => {
+          console.error('Body read error:', err);
           res.status(500).json({ message: 'Upload stream error' });
         });
       } catch (error) {
